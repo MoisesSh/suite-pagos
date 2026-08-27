@@ -77,6 +77,7 @@ services:
       DB_USER: ${ORQUESTADOR_DB_USER:-postgres}
       DB_PASSWORD: ${ORQUESTADOR_DB_PASSWORD}
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+      ALLOWED_HOSTS: suit-orquestador,localhost,127.0.0.1
     ports:
       - "8001:8000"
 
@@ -97,6 +98,7 @@ services:
     environment:
       DATABASE_URL: postgres://${CONCILIACION_DB_USER:-postgres}:${CONCILIACION_DB_PASSWORD}@postgres-conciliacion:5432/${CONCILIACION_DB_NAME:-conciliacion_pagos}
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+      ALLOWED_HOSTS: suit-conciliacion,localhost,127.0.0.1
     ports:
       - "8002:8000"
 
@@ -142,6 +144,7 @@ services:
     environment:
       CONCILIACION_API_URL: http://suit-conciliacion:8000
       NEXTAUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true" # Auth.js/NextAuth v5 detras de Docker/proxy: sin esto rechaza el host con UntrustedHost
     ports:
       - "3000:3000"
 

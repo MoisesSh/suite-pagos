@@ -51,6 +51,48 @@ self-hosted externo) para conectar solo el SDK, sin agregar infraestructura.
 
 ---
 
+## Bloque #11 — Usuario real de staff + 3 bugs de conectividad Docker ✅ COMPLETADO
+
+**Coordinado entre** coordinador y `suit-conciliacion` · **Estado:** login real
+end-to-end y registro real de apps end-to-end, ambos verificados en Docker
+
+**Usuario de staff real:** `hmachado@conatel.gob.ve` (is_staff=True,
+is_superuser=True) — decisión de alta vía Django admin, sin flujo de
+autoregistro (mismo criterio ya aplicado para el admin del Orquestador: staff
+interno, identidad ya conocida por quien da de alta). Permisos ajustados:
+`DiscrepanciaResolverView` ahora exige `IsAdminUser` además de
+`IsAuthenticated` (solo staff resuelve, cualquier autenticado consulta).
+
+**3 bugs reales de despliegue encontrados al probar el login/registro de
+verdad en Docker** (ninguno visible en desarrollo local, todos específicos del
+entorno containerizado):
+
+1. **NextAuth `UntrustedHost`** — Auth.js v5 detrás de Docker/proxy rechaza el
+   host por defecto. Fix: `AUTH_TRUST_HOST=true` en el entorno de `suit-frontend`.
+2. **`DisallowedHost` de Django** en ambos backends — `ALLOWED_HOSTS` no incluía
+   los hostnames internos de Docker (`suit-orquestador`, `suit-conciliacion`).
+   `suit-conciliacion` ya soportaba `ALLOWED_HOSTS` vía env; se agregó al
+   compose. `suit-orquestador` lo tenía hardcodeado a `[]` sin soporte de env
+   — gap de código real, corregido por `suit-backend` (default `[]` preservado
+   para no cambiar el comportamiento local).
+3. **Contenedor huérfano de `suit-conciliacion`** con `CMD [python3]` en vez del
+   entrypoint real — causado por dos invocaciones de `docker compose` con el
+   mismo nombre de proyecto (`suit-pagos`) pisándose entre sí (una desde la
+   raíz con `-f` explícito, otra desde `deploy/` sin `-f`, que además
+   auto-mezcló `docker-compose.override.yml`). Resuelto con rebuild `--no-cache`
+   y recreate explícito. **Lección operativa:** un solo lado (coordinador)
+   debe correr `docker compose` sobre este proyecto a la vez.
+
+**Verificación final, contra contenedores reales:**
+- Login real de `hmachado` vía NextAuth → 302 a `/`, cookies de sesión y
+  refresh seteadas correctamente.
+- Registro real de una aplicación desde `suit-portal` → `suit-orquestador`
+  (token admin generado en la base de datos real de Docker, no la de
+  desarrollo local — son instancias Postgres distintas) → `201`, fila real
+  creada (`AplicacionRegistrada` "Docker Smoke Test").
+
+---
+
 ## `suit-orquestador`
 
 ### Bloque #1 — Modelos base del Orquestador ✅ COMPLETADO

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     # Registra el modelo Token; django.contrib.admin autodiscovery importa
     # rest_framework/authtoken/admin.py automáticamente y lo expone en
     # /admin/authtoken/tokenproxy/ — un superuser genera su token ahí, sin UI de
@@ -193,6 +194,13 @@ REST_FRAMEWORK = {
         # unos pocos reintentos sin bloquear al usuario a mitad de un pago real.
         'cobro_c2p': '30/hour',
     },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Suit Orquestador API',
+    'DESCRIPTION': 'Orquestador de pagos (autorizacion/captura C2P BDV, registro de apps/dominios).',
+    'VERSION': '1.0.0',
 }
 
 

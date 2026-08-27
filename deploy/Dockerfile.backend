@@ -1,0 +1,56 @@
+# Dockerfile generico para los backends Django (suit-orquestador, suit-conciliacion).
+# Build context = raiz del monorepo. SERVICE_DIR selecciona el servicio:
+#   docker build -f deploy/Dockerfile.backend --build-arg SERVICE_DIR=suit-orquestador .
+#   docker build -f deploy/Dockerfile.backend --build-arg SERVICE_DIR=suit-conciliacion .
+
+# ────────────────────────────────────────
+# STAGE 1: base
+# ────────────────────────────────────────
+FROM python:3.13-slim AS base
+
+ARG SERVICE_DIR
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ────────────────────────────────────────
+# STAGE 2: deps
+# ────────────────────────────────────────
+FROM base AS deps
+
+ARG SERVICE_DIR
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY ${SERVICE_DIR}/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# ────────────────────────────────────────
+# STAGE 3: tester
+# ────────────────────────────────────────
+FROM deps AS tester
+
+ARG SERVICE_DIR
+COPY ${SERVICE_DIR}/ .
+RUN python manage.py check
+RUN python manage.py test --noinput
+
+# ────────────────────────────────────────
+# STAGE 4: runner
+# ────────────────────────────────────────
+FROM deps AS runner
+
+ARG SERVICE_DIR
+COPY ${SERVICE_DIR}/ .
+COPY deploy/scripts/entrypoint.backend.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 8000
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]

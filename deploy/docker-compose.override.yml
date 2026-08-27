@@ -1,0 +1,45 @@
+# Se aplica automaticamente junto a docker-compose.yml en desarrollo local:
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.override.yml up -d
+# Monta el codigo fuente como volumen y usa el servidor de desarrollo en vez
+# de gunicorn/build de produccion.
+
+services:
+  suit-orquestador:
+    build:
+      target: deps
+    volumes:
+      - ../suit-orquestador:/app
+    command: python manage.py runserver 0.0.0.0:8000
+
+  suit-conciliacion:
+    build:
+      target: deps
+    volumes:
+      - ../suit-conciliacion:/app
+    command: python manage.py runserver 0.0.0.0:8000
+
+  suit-conciliacion-celery-worker:
+    build:
+      target: deps
+    volumes:
+      - ../suit-conciliacion:/app
+
+  suit-frontend:
+    build:
+      target: deps
+    volumes:
+      - ../suit-frontend:/app
+      - /app/node_modules
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+
+  suit-portal:
+    build:
+      target: deps
+    volumes:
+      - ../suit-portal:/app
+      - /app/node_modules
+    command: npm run dev
+    environment:
+      - NODE_ENV=development

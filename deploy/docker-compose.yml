@@ -1,0 +1,145 @@
+# Orquestacion de los 4 servicios del monorepo. Ejecutar desde la raiz:
+#   docker compose -f deploy/docker-compose.yml up -d
+#
+# Decisiones de arquitectura respetadas (ver ORCHESTRATION-STATUS.md e
+# investigaciones/*.md — no cambiar sin revisar la justificacion):
+#   - Dos bases PostgreSQL COMPLETAMENTE SEPARADAS (database-per-service),
+#     nunca un solo Postgres con dos schemas (investigaciones/research-schemas-vs-bases-separadas.md).
+#   - RabbitMQ como unico broker de eventos, SIN Redis (investigaciones/research-rabbitmq-vs-redis.md).
+#     Redis no aparece en este compose — no agregarlo sin una necesidad real
+#     (cache/locks/rate-limiting), y nunca como broker ni result backend de Celery.
+#   - Solo suit-conciliacion tiene worker Celery (consume pago.* de RabbitMQ).
+#     suit-orquestador no tiene worker propio: su relay outbox->RabbitMQ es un
+#     poller via Celery beat corriendo dentro del propio proceso backend.
+
+services:
+  postgres-orquestador:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ORQUESTADOR_DB_NAME:-orquestador_pagos}
+      POSTGRES_USER: ${ORQUESTADOR_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${ORQUESTADOR_DB_PASSWORD}
+    volumes:
+      - postgres_orquestador_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORQUESTADOR_DB_USER:-postgres}"]
+      interval: 10s
+      retries: 5
+
+  postgres-conciliacion:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${CONCILIACION_DB_NAME:-conciliacion_pagos}
+      POSTGRES_USER: ${CONCILIACION_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${CONCILIACION_DB_PASSWORD}
+    volumes:
+      - postgres_conciliacion_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CONCILIACION_DB_USER:-postgres}"]
+      interval: 10s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4.3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "15672:15672" # management UI, solo dev/staging
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 5
+
+  suit-orquestador:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        SERVICE_DIR: suit-orquestador
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      postgres-orquestador:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    env_file: ../suit-orquestador/.env
+    environment:
+      DB_HOST: postgres-orquestador
+    ports:
+      - "8001:8000"
+
+  suit-conciliacion:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        SERVICE_DIR: suit-conciliacion
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      postgres-conciliacion:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    env_file: ../suit-conciliacion/.env
+    environment:
+      DATABASE_URL: postgres://${CONCILIACION_DB_USER:-postgres}:${CONCILIACION_DB_PASSWORD}@postgres-conciliacion:5432/${CONCILIACION_DB_NAME:-conciliacion_pagos}
+      CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+    ports:
+      - "8002:8000"
+
+  suit-conciliacion-celery-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.celery-worker
+    restart: unless-stopped
+    depends_on:
+      postgres-conciliacion:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    env_file: ../suit-conciliacion/.env
+    environment:
+      DATABASE_URL: postgres://${CONCILIACION_DB_USER:-postgres}:${CONCILIACION_DB_PASSWORD}@postgres-conciliacion:5432/${CONCILIACION_DB_NAME:-conciliacion_pagos}
+      CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+
+  suit-frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+      args:
+        SERVICE_DIR: suit-frontend
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      - suit-orquestador
+      - suit-conciliacion
+    env_file: ../suit-frontend/.env.local
+    ports:
+      - "3000:3000"
+
+  suit-portal:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+      args:
+        SERVICE_DIR: suit-portal
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      - suit-orquestador
+    env_file: ../suit-portal/.env.local
+    ports:
+      - "3001:3000"
+
+volumes:
+  postgres_orquestador_data:
+  postgres_conciliacion_data:
+  rabbitmq_data:

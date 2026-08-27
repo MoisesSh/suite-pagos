@@ -1,0 +1,26 @@
+# Worker Celery — solo suit-conciliacion (consume la cola pago.* de RabbitMQ,
+# hace polling a la API de conciliacion de BDV). suit-orquestador NO tiene
+# worker Celery propio: su relay outbox->RabbitMQ es un poller via Celery beat
+# dentro del mismo proceso backend, no un worker separado (ver deploy/README.md).
+# Build context = raiz del monorepo.
+
+FROM python:3.13-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM base AS deps
+
+COPY suit-conciliacion/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+FROM deps AS runner
+
+COPY suit-conciliacion/ .
+
+CMD ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=4"]

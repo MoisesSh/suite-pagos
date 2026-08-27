@@ -1,0 +1,22 @@
+# Aplica al build context (raiz del monorepo) para todas las imagenes de deploy/.
+.git
+.claude
+.opencode
+*.md
+
+# Python
+__pycache__/
+*.pyc
+*/.venv/
+*/db.sqlite3
+*.env
+*/.env
+*/.env.*
+
+# Node / Next.js
+*/node_modules/
+*/.next/
+
+# PDFs de proveedores y documentacion — no pertenecen a la imagen
+*.pdf
+investigaciones/

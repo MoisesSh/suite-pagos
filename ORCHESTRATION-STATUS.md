@@ -3,109 +3,133 @@
 > Mantenido por el coordinador (esta sesión). Se actualiza cada vez que un agente entrega
 > un avance o cambia de estado. No es responsabilidad de los agentes actualizarlo.
 
-Última actualización: 2026-08-27 08:25
+Última actualización: 2026-08-27 12:26
+
+## Estructura del proyecto (monorepo, un único repo git en la raíz)
+
+```
+suit_pagos/                    ← repo git único (historial nuevo, commit inicial b904c3d)
+├── suit-orquestador/          ← Django/DRF — servicio Orquestador (síncrono), antes "suit-backend"
+├── suit-conciliacion/         ← Django/DRF — servicio Conciliación (asíncrono), nuevo
+├── suit-frontend/             ← Next.js — panel administrativo interno
+├── suit-portal/               ← Next.js — Developer Portal (nuevo, para desarrolladores externos)
+├── investigaciones/           ← todos los research-*.md
+└── *.md, roadmap.html, PDFs de proveedores
+```
+
+Cada subproyecto es independiente en tiempo de ejecución (DB propia, deploy propio),
+pero comparten un único repositorio git — decisión explícita del usuario tras
+detectar que 3 repos separados generaban fricción operativa innecesaria.
 
 ## Objetivo activo
 
-Diseñar el modelo de datos y luego la API/UI para la Suite Centralizada de Pagos
-(payment gateway interno), según `conatel-suite-pagos-roadmap.html`: Orquestador
-(síncrono) + Conciliación (asíncrono), database-per-service, sin FKs cruzadas.
+Payment gateway interno para Conatel (Orquestador + Conciliación + Panel + Developer
+Portal), según `conatel-suite-pagos-roadmap.html` (ya actualizado con todas las
+decisiones de esta sesión).
 
-## Jerarquía y dependencias
+## Tabla de agentes (7 activos)
 
-```
-research (transversal) ──┐
-                          ├──> expert_database ──> suit-backend ──> suit-frontend
-                          │        (Top)             (Middle)          (Bottom)
-```
+| Agente | Sesión Claude | Carpeta | Estado |
+|---|---|---|---|
+| `research` | `research` | raíz | Transversal, briefeado tras reinicio de runtime, en espera |
+| `expert_database` | `expert_database` | `suit-orquestador/` | Modelado Orquestador maduro (`db-plan-pagos.md`) |
+| `suit-backend` | `suit-backend` | `suit-orquestador/` | Bloque #1 y #2 completados y verificados contra Postgres real |
+| `expert_database_conciliacion` | `expert_database_conciliacion` | `suit-conciliacion/` | Resolvió 6 gaps de modelado en sección 3, 1 punto de negocio resuelto |
+| `suit-conciliacion` | `suit-conciliacion` | `suit-conciliacion/` | Bloque de próximo paso #1 autorizado, en ejecución |
+| `suit-frontend` | `suit-frontend` | `suit-frontend/` | Panel admin, build verificado, en espera de contrato de API |
+| `suit-portal` | `suit-portal` | `suit-portal/` | Developer Portal, scaffold confirmado, en espera de contrato de API de registro de apps/dominios |
 
-## Tabla de agentes
+## Regla de ejecución vigente (todos los agentes de código)
 
-| Agente | Sesión Claude | Worktree / carpeta | Estado | Último entregable |
-|---|---|---|---|---|
-| `research` | `research` | raíz `suit_pagos` | Investigando stack RabbitMQ/Celery/Redis (en curso) | `research-brief-pagos.md` (roadmap + mejores prácticas + hallazgos de 2 PDFs BDV) |
-| `expert_database` | `expert_database` | `orca/workspaces/suit-backend/db-backend` | Plan v2 entregado, en espera de aprobación/decisiones | `db-plan-pagos.md` (v2: catálogos Banco/TipoOperacionProveedor/CodigoRespuestaProveedor confirmados con BDV, ConsultaConciliacionProveedor reemplaza el supuesto de feed batch) |
-| `suit-backend` | `suit-backend` | `orca/workspaces/suit-backend/db-backend` (mismo worktree, terminal separado) | Skills cargadas, regla de "bloque de próximo paso" aceptada, en espera del esquema final | — (sin código de dominio aún) |
-| `suit-frontend` | `suit-frontend` | `orca/workspaces/suit-frontend/ui-frontend` | Skills globales revisadas, regla de "bloque de próximo paso" aceptada, en espera del contrato de API | — (solo scaffold Next.js) |
+Ningún agente ejecuta trabajo directamente: arman un **bloque de próximo paso**
+(qué se hará, alcance, archivos afectados, qué falta confirmar) y esperan la
+orden de ejecución explícita del coordinador antes de tocar código.
 
-## Documentos generados para el usuario
+## Decisiones de arquitectura confirmadas
 
-- `DB-MODELO.md` (raíz) — diagramas Mermaid (ER Orquestador, ER Conciliación, flujo de eventos) del modelo de `db-plan-pagos.md`.
-- `ORCHESTRATION-STATUS.md` (este archivo) — estado vivo de los 4 agentes.
+- **Monorepo único** en la raíz, historial de git nuevo (no se preservó el de los
+  3 repos previos, por decisión del usuario — el historial previo era mínimo).
+- **Backend en Django/DRF**, arquitectura híbrida con Rust confirmada para dos
+  componentes puntuales cuando el volumen lo justifique: motor de matching de
+  Conciliación y validación de balance del ledger de doble entrada (ver
+  `ARQUITECTURA-HIBRIDA-RUST.md`). Ambos quedan detrás de un puerto explícito
+  desde el día 1, aunque implementados en Python.
+- **Multi-proveedor sin choque** es principio de diseño obligatorio.
+- **`suit-frontend`** = panel administrativo interno. **`suit-portal`** = Developer
+  Portal externo (registro de apps, API keys, dominios, documentación). El
+  formulario de cobro real se sirve embebido por iframe en las apps consumidoras
+  (`frame-ancestors` dinámico + validación Origin/Referer en backend).
+- **Registro de seguridad de apps/dominios** vive en `suit-orquestador` —
+  `AplicacionRegistrada`, `DominioPermitido`, `AplicacionProveedorPermitido`.
+  Ya implementado y verificado (`ValidacionAccesoService` + endpoint).
+- **Bases de datos PostgreSQL completamente separadas** por servicio (no schemas
+  compartidos) — `orquestador_pagos` ya creada y en uso; Conciliación tendrá su
+  propia base cuando `suit-conciliacion` llegue a las migraciones.
+- **RabbitMQ + Celery**, sin Redis como broker (rol futuro acotado a cache/locks).
+- **Relay outbox → RabbitMQ**: poller Celery simple (no Debezium/CDC) del lado
+  Orquestador. Del lado Conciliación: worker Celery consumiendo directo de la
+  cola `pago.*` (patrón estándar, no poller — eso es específico del outbox).
+- **Fuera de alcance por ahora**: tarjeta y tokenización. Único medio de pago
+  real: BDV Pago Móvil C2P.
+- **Manejo de dinero**: `Decimal`/`DECIMAL` nativo, sin librería externa
+  (`django-money` evaluada y descartada por ahora — el sistema no hace
+  conversión de divisas).
+- **Balance-cero del ledger y transiciones de estado**: forzados con
+  constraint/trigger a nivel Postgres, no solo disciplina de servicio
+  (ya implementado y probado funcionalmente en `suit-orquestador`).
+- **Auth de staff de Conciliación**: usuario propio local (`apps/users` dentro
+  de `suit-conciliacion`), no identidad de otro servicio — `Discrepancia.resuelto_por`
+  es FK real con `SET_NULL`.
 
-## Insumos ya generados
+## Avances de código verificados
 
-- `research-brief-pagos.md` — mejores prácticas (outbox, idempotencia, ledger doble entrada,
-  tokenización PCI) + hallazgos reales de 2 PDFs de proveedores (C2P Cuentas Múltiples,
-  Conciliación Dummy): dos IDs de correlación (referencia corta / end_to_end_id), catálogo
-  de bancos, moneda VES con placeholder USD, códigos de error de idempotencia propios del
-  proveedor (1026/1094), caso de `cedulaPagador` sustituida en operaciones interbancarias,
-  conciliación por polling (no webhook), necesidad de tabla de staging cruda.
-- `db-plan-pagos.md` — bosquejo de modelos Django para Orquestador y Conciliación,
-  con reglas de `supervision-modelos-bd` aplicadas (UUIDv7, catálogos vs TextChoices,
-  matriz on_delete, índices). 8 puntos abiertos de negocio/infra pendientes de decisión.
+**`suit-orquestador`** (Postgres real, base `orquestador_pagos`):
+- `apps/autorizacion`: catálogos (Moneda, MedioPago, ProveedorPago, Banco,
+  TipoOperacionProveedor, CodigoRespuestaProveedor), agregado de pago
+  (IntencionPago, TransicionEstadoPago, Autorizacion/Captura/Anulacion/Reembolso),
+  outbox/idempotencia (EventoOutbox, IdempotencyKey con expires_at=48h).
+- Trigger PL/pgSQL de transiciones de estado, probado funcionalmente (acepta
+  válidas, rechaza saltos inválidos y estados desincronizados).
+- `ValidacionAccesoService` + endpoint `POST /api/autorizacion/validar-acceso/`
+  (control de seguridad bloqueante dominio→app→proveedor), 10 tests pasando.
+- Commit `f62e3f3` (historial previo, ya integrado al monorepo).
+
+**`suit-conciliacion`**: bloque de próximo paso #1 autorizado y en ejecución
+(apps/shared, apps/users con auth JWT local, apps/conciliacion con el agregado
+completo de la sección 3 del plan — catálogos, ingesta, matching BDV, ledger
+de doble entrada, discrepancias, endpoints mínimos).
+
+**`suit-frontend`** y **`suit-portal`**: solo scaffold verificado (build exitoso),
+sin código de dominio — ambos en espera del contrato de API del backend.
+
+## Documentos de referencia
+
+- `conatel-suite-pagos-roadmap.html` — actualizado con todas las decisiones.
+- `DB-MODELO.md` — diagramas Mermaid del modelo de datos.
+- `ARQUITECTURA-HIBRIDA-RUST.md` — componentes candidatos a extraer a Rust.
+- `db-plan-pagos.md` (raíz, copia de referencia; el vivo está en `suit-orquestador/`
+  y `suit-conciliacion/`) — plan de datos completo de ambos servicios.
+- `investigaciones/*.md` — 10 investigaciones técnicas con evidencia (RabbitMQ vs
+  Redis, Rust vs Django, schemas vs bases separadas, manejo de dinero, outbox vs
+  CDC, seguridad de iframes, arquitectura backend, etc.)
 
 ## Puntos abiertos pendientes de decisión del usuario
 
-1. Proveedor real de tokenización (forma exacta de `TokenReferencia.token`)
-2. Catálogo definitivo de monedas soportadas (¿solo VES/USD desde T1?)
-3. Confirmar que `AppConsumidora`/API keys viven solo en el Developer Portal
-4. Mecanismo de balance-cero del ledger (trigger Postgres vs. validación en servicio)
-5. Ventana de expiración de `IdempotencyKey.expires_at` (industria: 24-48h)
-6. Gobernanza del registro de esquemas de eventos versionados
-7. Semántica de reintentos multi-adquirente (nueva `Autorizacion` vs. nueva `IntencionPago`)
-8. Mecanismo del relay outbox → RabbitMQ (poller propio vs. CDC/Debezium)
+1. Proveedor real de tokenización — diferido, fuera de alcance actual.
+2. Catálogo definitivo de monedas más allá de VES/USD — no urgente.
+3. Confirmar `AppConsumidora`/API keys — resuelto: viven en `suit-orquestador`
+   (registro de seguridad), `suit-portal` es solo la interfaz de gestión.
+4. Ventana de expiración de `IdempotencyKey.expires_at` — resuelto: 48h.
+5. Gobernanza del registro de esquemas de eventos versionados — pendiente,
+   no bloqueante para el MVP.
+6. Semántica de reintentos multi-adquirente — despriorizado hasta T4.
 
-## Regla de ejecución para `suit-backend` y `suit-frontend`
+## Notas operativas
 
-A partir de ahora, estos dos agentes **no ejecutan trabajo directamente**: antes de
-desarrollar/resolver/mejorar/arreglar/optimizar algo, arman un **bloque de próximo paso**
-(qué se va a hacer, alcance, archivos afectados) y esperan la orden de ejecución del
-coordinador antes de tocar código.
-
-## Decisiones de arquitectura confirmadas (2026-08-27)
-
-- Multi-proveedor sin choque es principio de diseño obligatorio (ningún campo específico
-  de proveedor en el agregado de pago; todo lo variable va en catálogos por proveedor).
-- `suit-frontend` = panel administrativo interno, NO el formulario de cobro.
-- El formulario de cobro se sirve embebido por iframe en las apps consumidoras
-  (probablemente servido por `suit-backend`), con `frame-ancestors` dinámico por
-  dominio registrado + validación Origin/Referer en backend + postMessage con
-  validación de origen (ver `research-seguridad-iframe.md`).
-- Registro de seguridad de apps/dominios vive en el Orquestador (`AplicacionRegistrada`,
-  `DominioPermitido`, `AplicacionProveedorPermitido`) — si el dominio/app no está
-  registrado para ese proveedor, se rechaza. Resuelve el punto abierto 4 del plan de datos.
-- Fuera de alcance por ahora: tarjeta y tokenización (`TokenReferencia`,
-  `ProveedorTokenizacion` documentados pero no implementados). Único medio de pago real:
-  BDV Pago Móvil C2P (de los PDFs que analizó `research`).
-- Stack de mensajería verificado: RabbitMQ 4.3.x + Celery ≥5.6.x; Redis no es obligatorio
-  (ni broker ni result backend) — rol opcional acotado a locks/rate-limiting/cache si se
-  necesita más adelante (`research-stack-mensajeria.md`).
-
-## Bloque de próximo paso #1 — `suit-backend` (COMPLETADO Y VERIFICADO)
-
-`apps/autorizacion` creada con modelos + migraciones + admin del Orquestador
-(2.0 registro de apps/dominios, catálogos, agregado de pago, outbox/idempotencia).
-Corriendo contra **Postgres real** (base `orquestador_pagos`, credenciales en
-`.env`, cubierto por `.gitignore`). Trigger PL/pgSQL de transiciones de estado
-verificado funcionalmente (acepta válidas, rechaza saltos inválidos y estados
-desincronizados). Seed de monedas (VES activo, USD inactivo) confirmado.
-
-**Siguiente paso en curso:** endpoint de validación dominio→app→proveedor
-(control de seguridad bloqueante de la sección 2.0) — autorizado, en ejecución.
-
-**Nota de infraestructura para recordar:** el runtime de Orca se reinició dos
-veces durante esta sesión, matando terminales de agentes sin previo aviso
-(el trabajo en archivos no se perdió, solo las sesiones). Si vuelve a pasar,
-recrear terminales con `orca terminal create` en el mismo worktree y re-briefar
-con los archivos ya guardados en disco — no se pierde progreso real.
-
-## Próximos pasos del coordinador
-
-1. Esperar a que `expert_database` termine de refinar `db-plan-pagos.md` con los hallazgos
-   de la sección 4 del brief.
-2. Decidir con el usuario los puntos abiertos (o delegarlos a `expert_database` con defaults).
-3. Pasar el plan final a `suit-backend` para que arme su primer bloque de próximo paso
-   (modelos Django reales) y esperar la orden de ejecución.
-4. Una vez `suit-backend` entregue el contrato de API, pasarlo a `suit-frontend` para su
-   primer bloque de próximo paso.
+- El runtime de Orca se reinició varias veces durante esta sesión, matando
+  terminales de agentes sin previo aviso. El trabajo en archivos nunca se
+  perdió (todo en disco/git), solo las sesiones — recrear terminales con
+  `orca terminal create` y re-briefar con los archivos ya guardados.
+- Los agentes pueden mandarse mensajes entre sí de forma nativa vía Orca
+  (`@nombre-agente`) — ya se usó entre `expert_database_conciliacion` y
+  `suit-conciliacion` para coordinar el esquema antes de escribir código.

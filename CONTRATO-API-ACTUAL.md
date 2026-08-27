@@ -14,7 +14,7 @@
 |---|---|---|---|
 | POST | `/api/auth/login/` | `{"email", "password"}` | `{access, refresh, usuario: {...}}` + cookie `refresh_token` HttpOnly |
 | POST | `/api/auth/refresh/` | (cookie) | nuevo access token **+ nuevo `refresh` en el body** — rota en cada llamada, persistir el nuevo valor (no parsear `Set-Cookie` a mano) |
-| POST | `/api/auth/logout/` | requiere `Authorization: Bearer <access>` + `{"refresh": "..."}` en el body — la sola cookie no alcanza | invalida refresh (blacklist) |
+| POST | `/api/auth/logout/` | requiere `Authorization: Bearer <access>`; el refresh se acepta por cookie **o** por `{"refresh": "..."}` en el body (prueba cookie primero, cae al body) — depende del cliente si puede reenviar cookies automáticamente | invalida refresh (blacklist) |
 
 **Verificado contra servidor real** (2026-08-27): `POST /api/auth/login/` devuelve
 `{"access": "...", "refresh": "...", "usuario": {"id", "email", "username", "is_staff", "is_superuser"}}`

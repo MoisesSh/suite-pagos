@@ -86,13 +86,54 @@ Migración `0004_seed_catalogos_bdv_c2p.py` puebla `MedioPago`, `ProveedorPago`,
 
 ---
 
-### Bloque #4 — Endpoint público de cobro 🔄 EN EJECUCIÓN
+### Bloque #4 — Endpoint público de cobro ✅ COMPLETADO
 
-**Propuesto por:** `suit-backend` · **Estado:** autorizado, en curso
+**Propuesto por:** `suit-backend` · **Estado:** ejecutado y verificado (43/43 tests)
 
-**Alcance:** exponer el flujo `FlujoCobroC2PService` como endpoint público,
-respetando el requisito de seguridad ya establecido (validación de dominio/iframe,
-`research-seguridad-iframe.md`) antes de aceptar cualquier petición externa.
+**Alcance:** `FlujoCobroC2PService` expuesto como endpoint público, con **token
+de sesión de checkout firmado** (`TimestampSigner`, corta duración, encapsula
+`aplicacion_id` + `proveedor_codigo`) emitido por `ValidarAccesoView` y validado
+por el endpoint de cobro — decisión tomada para cerrar el hueco de seguridad
+del camino crítico ahora, en vez de dejarlo pendiente hasta el bloque del iframe
+(ver `research-seguridad-iframe.md`). Incluye idempotencia real (`IdempotencyKey`
+con dedup por `request_hash`, respuesta cacheada si coincide, 409 si difiere).
+
+---
+
+### Bloque #5 — Contrato del evento `pago.confirmado` + escritura de `EventoOutbox` ✅ COMPLETADO
+
+**Propuesto por:** `suit-backend` · **Estado:** ejecutado y verificado (45/45 tests)
+
+**Alcance:** contrato de 10 campos persistido en
+`investigaciones/contrato-evento-pago-confirmado.md` (incluye `cedula_pagador`/
+`telefono_pagador` que Conciliación necesita para el matching, `routing_flag`,
+`payload_crudo_captura`). `FlujoCobroC2PService.ejecutar_cobro` escribe el
+`EventoOutbox` dentro de la misma transacción atómica que `Captura` — un cobro
+fallido no publica ningún evento. **Desbloqueó a `suit-conciliacion`.**
+
+---
+
+### Bloque #6 — Relay outbox → RabbitMQ ✅ COMPLETADO
+
+**Propuesto por:** `suit-backend` · **Estado:** ejecutado y verificado en vivo (50/50 tests + RabbitMQ real)
+
+**Alcance:** poller vía Celery beat (no CDC/Debezium, según
+`research-outbox-vs-cdc.md`) — `SELECT ... FOR UPDATE SKIP LOCKED` en lotes de
+100, publisher confirms de RabbitMQ antes de marcar `enviado`, backoff fijo por
+tick (no exponencial per-row, decisión YAGNI consistente con el resto del
+proyecto) con tope de reintentos antes de pasar a `fallido`. Incluye el mismo
+fix `CELERY_WORKER_ENABLE_REMOTE_CONTROL=False` que encontró Conciliación.
+Cierra el pipeline end-to-end Orquestador → RabbitMQ → Conciliación.
+
+**Verificación en vivo:** `EventoOutbox` real → `OutboxRelayService.procesar_lote()`
+→ exchange `pago` (aislado con routing key de prueba, sin tocar la cola real de
+Conciliación) → confirmado recibido, fila marcada `enviado`. Confirmó
+empíricamente que el fix `CELERY_WORKER_ENABLE_REMOTE_CONTROL=False` también
+es necesario del lado Orquestador (lo disparó por accidente durante la prueba).
+**Incidente resuelto:** quedó un mensaje de prueba de una verificación anterior
+atascado en la cola real `conciliacion.eventos_pago` — el coordinador lo purgó
+directamente vía `rabbitmqctl purge_queue` antes de que el worker de
+Conciliación pudiera intentar procesarlo y fallar.
 
 ---
 

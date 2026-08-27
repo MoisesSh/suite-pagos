@@ -5,14 +5,15 @@ from django.shortcuts import render
 from django.views import View
 
 from apps.autorizacion.api.checkout_token_resolver import resolver_checkout_token
-from apps.autorizacion.domain.models import DominioPermitido
+from apps.autorizacion.domain.models import Banco, DominioPermitido
 
 logger = logging.getLogger(__name__)
 
 # Único proveedor soportado hoy (FlujoCobroC2PService, BDVPagoMovilC2PAdapter) —
 # el formulario no necesita pedirle nada al respecto a la app consumidora.
+# El banco del PAGADOR sí es dinámico (interoperabilidad C2P, ver el catálogo
+# Banco) — nunca hardcodearlo, aunque hoy solo exista una fila (BDV).
 PROVEEDOR_CODIGO = 'BDV'
-BANCO_CODIGO = '0102'
 
 
 def _extraer_origen_embebedor(request):
@@ -65,13 +66,14 @@ class FormularioCobroView(View):
             'monto': payload['monto'],
             'moneda': payload['moneda'],
             'concepto': payload['concepto'],
+            'bancos': Banco.objects.filter(activo=True).order_by('nombre').values('codigo', 'nombre'),
             # |json_script en el template serializa esto de forma segura a un
             # <script type="application/json">. parentOrigin=None -> JS null: la
-            # plantilla nunca debe caer a postMessage('*').
+            # plantilla nunca debe caer a postMessage('*'). Sin bancoCodigo acá:
+            # el banco lo elige el pagador en el <select>, no es un valor fijo.
             'datos_formulario': {
                 'checkoutToken': checkout_token,
                 'proveedor': PROVEEDOR_CODIGO,
-                'bancoCodigo': BANCO_CODIGO,
                 'parentOrigin': origen_embebedor,
             },
         }

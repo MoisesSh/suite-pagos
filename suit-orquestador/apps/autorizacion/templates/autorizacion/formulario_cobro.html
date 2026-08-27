@@ -9,7 +9,7 @@
   .monto { font-size: 1.4rem; font-weight: 600; margin-bottom: 1rem; }
   .concepto { color: #555; margin-bottom: 1.25rem; }
   label { display: block; font-size: 0.85rem; margin-bottom: 0.25rem; color: #333; }
-  input { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 0.9rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+  input, select { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 0.9rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
   button { width: 100%; padding: 0.6rem; border: none; border-radius: 4px; background: #0a5c36; color: white; font-size: 1rem; cursor: pointer; }
   button:disabled { background: #9ab; cursor: not-allowed; }
   .oculto { display: none; }
@@ -28,6 +28,14 @@
 
     <label for="telefono">Teléfono afiliado a Pago Móvil</label>
     <input type="text" id="telefono" placeholder="04121234567" required>
+
+    <label for="banco">Banco afiliado a Pago Móvil</label>
+    <select id="banco" required>
+      <option value="" disabled selected>-- Selecciona tu banco --</option>
+      {% for banco in bancos %}
+      <option value="{{ banco.codigo }}">{{ banco.nombre }}</option>
+      {% endfor %}
+    </select>
 
     <button type="submit" id="btn-otp">Solicitar clave (OTP)</button>
   </form>
@@ -49,7 +57,6 @@
   var datos = JSON.parse(document.getElementById('datos-formulario').textContent);
   var CHECKOUT_TOKEN = datos.checkoutToken;
   var PROVEEDOR = datos.proveedor;
-  var BANCO_CODIGO = datos.bancoCodigo;
   var PARENT_ORIGIN = datos.parentOrigin; // null si no se pudo determinar el embebedor
   var idempotencyKey = crypto.randomUUID();
 
@@ -119,7 +126,7 @@
         idempotency_key: idempotencyKey,
         cedula_pagador: document.getElementById('cedula').value,
         telefono_pagador: document.getElementById('telefono').value,
-        banco_codigo: BANCO_CODIGO,
+        banco_codigo: document.getElementById('banco').value,
         otp: document.getElementById('otp').value,
       }),
     })

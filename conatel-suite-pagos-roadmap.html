@@ -1,0 +1,663 @@
+<title>Suite Centralizada de Pagos — Roadmap</title>
+<style>
+  :root{
+    --bg:#EEF1F4;
+    --surface:#FFFFFF;
+    --surface-2:#E4E9ED;
+    --ink:#16232E;
+    --muted:#4B5A66;
+    --border:#C7D0D6;
+    --accent:#0E6E66;
+    --accent-ink:#083B36;
+    --accent-soft:#D9EEEA;
+    --risk-high:#B23A2E;
+    --risk-high-soft:#F5DEDB;
+    --risk-med:#95611A;
+    --risk-med-soft:#F1E3CE;
+    --good:#2F7A55;
+    --good-soft:#DCEEE3;
+    --shadow: 0 1px 2px rgba(22,35,46,.06), 0 8px 24px -12px rgba(22,35,46,.18);
+  }
+  /* Modo claro fijo: el documento no cambia con el tema del sistema ni con el toggle del visor. */
+  :root[data-theme="dark"],
+  :root[data-theme="light"]{
+    --bg:#EEF1F4; --surface:#FFFFFF; --surface-2:#E4E9ED; --ink:#16232E; --muted:#4B5A66;
+    --border:#C7D0D6; --accent:#0E6E66; --accent-ink:#083B36; --accent-soft:#D9EEEA;
+    --risk-high:#B23A2E; --risk-high-soft:#F5DEDB; --risk-med:#95611A; --risk-med-soft:#F1E3CE;
+    --good:#2F7A55; --good-soft:#DCEEE3;
+    --shadow: 0 1px 2px rgba(22,35,46,.06), 0 8px 24px -12px rgba(22,35,46,.18);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    line-height:1.6;
+    font-size:16px;
+  }
+  ::selection{ background:var(--accent-soft); color:var(--accent-ink); }
+
+  .head, .headfont{
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    letter-spacing:-0.01em;
+  }
+  .mono{
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .eyebrow{
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    text-transform:uppercase;
+    letter-spacing:.10em;
+    font-size:.72rem;
+    color:var(--accent);
+    font-weight:600;
+  }
+
+  a{color:var(--accent);}
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  .wrap{max-width:960px; margin:0 auto; padding:0 24px 96px;}
+
+  /* ---- Cover ---- */
+  .cover{
+    border-bottom:1px solid var(--border);
+    padding:56px 0 40px;
+    margin-bottom:8px;
+  }
+  .cover .eyebrow{display:block; margin-bottom:14px;}
+  .cover h1{
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size:clamp(1.9rem, 4vw, 2.7rem);
+    font-weight:700;
+    line-height:1.12;
+    margin:0 0 14px;
+    text-wrap:balance;
+    max-width:20ch;
+  }
+  .cover p.lede{
+    max-width:62ch;
+    color:var(--muted);
+    font-size:1.08rem;
+    margin:0 0 22px;
+  }
+  .cover-meta{
+    display:flex; flex-wrap:wrap; gap:10px 28px;
+    font-size:.82rem;
+  }
+  .cover-meta div{ display:flex; flex-direction:column; gap:2px; }
+  .cover-meta span.k{ font-family:"IBM Plex Mono",ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; font-size:.68rem; color:var(--muted); }
+  .cover-meta span.v{ font-weight:600; }
+
+  /* ---- Nav ---- */
+  nav.toc{
+    position:sticky; top:0; z-index:20;
+    background:color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(6px);
+    border-bottom:1px solid var(--border);
+    overflow-x:auto;
+    white-space:nowrap;
+    padding:10px 24px;
+    margin-bottom:32px;
+  }
+  nav.toc a{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.74rem;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted);
+    text-decoration:none;
+    margin-right:22px;
+    border-bottom:2px solid transparent;
+    padding-bottom:10px;
+  }
+  nav.toc a:hover{ color:var(--ink); }
+
+  /* ---- Sections ---- */
+  section{ margin:64px 0; }
+  section h2{
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size:1.5rem;
+    font-weight:700;
+    display:flex; align-items:baseline; gap:12px;
+    margin:0 0 6px;
+    text-wrap:balance;
+  }
+  section h2 .num{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    color:var(--accent);
+    font-size:1rem;
+    font-weight:600;
+  }
+  section > .eyebrow{ display:block; margin-bottom:8px; }
+  section h3{
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size:1.08rem; font-weight:700; margin:28px 0 10px;
+  }
+  p{ max-width:66ch; }
+  section > p, section > ul{ max-width:66ch; }
+  ul, ol{ padding-left:1.3em; }
+  li{ margin-bottom:6px; }
+
+  .callout{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-left:3px solid var(--accent);
+    border-radius:6px;
+    padding:16px 20px;
+    box-shadow:var(--shadow);
+    max-width:70ch;
+    margin:20px 0;
+  }
+  .callout .eyebrow{ margin-bottom:6px; }
+  .callout p{ margin:0 0 8px; }
+  .callout p:last-child{ margin-bottom:0; }
+
+  .assumption{
+    border-left-color: var(--risk-med);
+  }
+  .assumption .eyebrow{ color:var(--risk-med); }
+
+  /* ---- Tables ---- */
+  .table-wrap{ overflow-x:auto; margin:20px 0; border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow); }
+  table{ border-collapse:collapse; width:100%; min-width:640px; background:var(--surface); }
+  th, td{
+    text-align:left; padding:10px 14px; border-bottom:1px solid var(--border);
+    font-size:.88rem; vertical-align:top;
+  }
+  thead th{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    text-transform:uppercase; letter-spacing:.05em; font-size:.68rem;
+    color:var(--muted); background:var(--surface-2);
+    position:sticky; top:0;
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:var(--surface-2); }
+  td.num, th.num{ font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums; }
+  .tag{
+    display:inline-block; font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.68rem; text-transform:uppercase; letter-spacing:.04em;
+    padding:2px 7px; border-radius:4px; font-weight:600;
+  }
+  .tag.high{ background:var(--risk-high-soft); color:var(--risk-high); }
+  .tag.med{ background:var(--risk-med-soft); color:var(--risk-med); }
+  .tag.good{ background:var(--good-soft); color:var(--good); }
+  .tag.accent{ background:var(--accent-soft); color:var(--accent-ink); }
+
+  /* ---- Quarter cards ---- */
+  pre.tree{
+    font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.76rem; line-height:1.55;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
+    padding:16px 20px; overflow-x:auto; margin:18px 0; max-width:70ch;
+  }
+  .quarters{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin:24px 0; }
+  .qcard{ background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:18px; box-shadow:var(--shadow); }
+  .qcard .qhead{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .qcard .qhead .q{ font-family:"IBM Plex Mono",ui-monospace,monospace; font-weight:700; color:var(--accent); font-size:1.1rem; }
+  .qcard .qhead .m{ font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.68rem; color:var(--muted); }
+  .qcard h4{ font-family:-apple-system,"Segoe UI",sans-serif; font-size:.95rem; margin:14px 0 4px; }
+  .qcard h4:first-of-type{ margin-top:0; }
+  .qcard ul{ margin:0; padding-left:1.1em; font-size:.86rem; }
+  .qcard li{ margin-bottom:4px; }
+
+  /* ---- KPI grid ---- */
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin:24px 0; }
+  .kpi{ background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px 18px; box-shadow:var(--shadow); }
+  .kpi .eyebrow{ display:block; margin-bottom:8px; }
+  .kpi .from-to{ display:flex; align-items:baseline; gap:8px; font-family:"IBM Plex Mono",ui-monospace,monospace; }
+  .kpi .from{ color:var(--muted); font-size:1rem; text-decoration:line-through; text-decoration-color:var(--risk-high); }
+  .kpi .arrow{ color:var(--muted); }
+  .kpi .to{ color:var(--good); font-size:1.35rem; font-weight:700; }
+  .kpi .desc{ font-size:.82rem; color:var(--muted); margin-top:6px; font-family: -apple-system,sans-serif; }
+
+  /* ---- Diagram ---- */
+  figure{ margin:24px 0; }
+  figure svg{ width:100%; height:auto; display:block; background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow); }
+  figcaption{ font-size:.82rem; color:var(--muted); margin-top:10px; max-width:66ch; font-family:-apple-system,sans-serif; }
+
+  footer{
+    border-top:1px solid var(--border); margin-top:80px; padding:28px 0 0;
+    color:var(--muted); font-size:.8rem;
+  }
+
+  @media (max-width:640px){
+    .wrap{padding:0 16px 64px;}
+    .cover{padding:40px 0 28px;}
+  }
+</style>
+
+<nav class="toc" aria-label="Contenido">
+  <a href="#arquitectura">01 Arquitectura</a>
+  <a href="#contexto">02 Contexto C4</a>
+  <a href="#stack">03 Stack &amp; datos</a>
+  <a href="#roadmap">04 Roadmap</a>
+  <a href="#critico">05 Ruta crítica</a>
+  <a href="#gobernanza">06 Gobernanza</a>
+  <a href="#riesgos">07 Riesgos</a>
+  <a href="#kpis">08 KPIs</a>
+</nav>
+
+<div class="wrap">
+
+  <header class="cover">
+    <span class="eyebrow">Conatel · Arquitectura de soluciones · Dossier de planificación</span>
+    <h1>Suite Centralizada de Pagos<br>hacia un Payment Gateway como servicio interno</h1>
+    <p class="lede">Roadmap para desacoplar los medios de pago del core de cada aplicación, con un servicio de conciliación independiente y una API pública para consumidores presentes y futuros.</p>
+    <div class="cover-meta">
+      <div><span class="k">Stack</span><span class="v">Next.js · Django · RabbitMQ/Celery (+ Rust puntual, futuro)</span></div>
+      <div><span class="k">Arquitectura</span><span class="v">Onion + Screaming (feature-sliced)</span></div>
+      <div><span class="k">Apps piloto</span><span class="v">Conatel en Línea · Homologación</span></div>
+      <div><span class="k">Cumplimiento</span><span class="v">PCI-DSS Nivel 1 · normativa BCV</span></div>
+      <div><span class="k">Fecha</span><span class="v">17 ago 2026</span></div>
+    </div>
+  </header>
+
+  <section id="arquitectura">
+    <span class="eyebrow">01 — Arquitectura objetivo</span>
+    <h2><span class="num">01</span> De integraciones dispersas a plataforma de pagos</h2>
+    <p>La meta no es "otro microservicio de pagos": es una <strong>plataforma interna (PaaS)</strong> con dos motores que deben poder fallar, escalar y desplegarse por separado:</p>
+    <ul>
+      <li><strong>Orquestador transaccional</strong> — capas Onion (dominio en el centro; Django, RabbitMQ y cada proveedor son infraestructura periférica), en el camino síncrono crítico (autorizar, capturar, revertir). Cada medio de pago —tarjeta, Pago Móvil/C2P, transferencia, débito automático o pasarela internacional— es un adaptador de salida detrás de un puerto <span class="mono">PaymentProviderPort</span>; agregar un proveedor nuevo no debe tocar el dominio.</li>
+      <li><strong>Conciliación</strong> — vive fuera del camino síncrono. Se alimenta de eventos, no de llamadas directas del orquestador, precisamente para que una conciliación lenta o un banco caído nunca bloqueen un cobro.</li>
+    </ul>
+
+    <div class="callout">
+      <span class="eyebrow">Principio de diseño — multi-proveedor sin choque</span>
+      <p>Que varios proveedores de pago puedan implementarse sin chocar entre sí no es una aspiración: es una regla obligatoria del modelo de datos. Ningún campo del agregado de pago (intención, autorización, captura, anulación, reembolso) puede ser específico de un proveedor — todo lo variable por proveedor (tipos de operación, catálogo de códigos de respuesta, payload crudo) vive en catálogos o en campos genéricos, nunca como columna o tabla paralela nueva por banco/pasarela.</p>
+    </div>
+
+    <h3>Panel administrativo, formulario de cobro por iframe, y registro de aplicaciones</h3>
+    <p>El <strong>Developer Portal / Next.js es el panel administrativo interno</strong> (transacciones, discrepancias, aplicaciones y dominios registrados) — no el formulario de cobro que ve el usuario final. El formulario real se sirve <strong>embebido por iframe</strong> dentro de cada app consumidora, con dos capas de seguridad: <span class="mono">Content-Security-Policy: frame-ancestors</span> resuelto dinámicamente por request contra la tabla de dominios autorizados, y validación de <span class="mono">Origin</span>/<span class="mono">Referer</span> en el propio backend como defensa en profundidad (el navegador respeta <span class="mono">frame-ancestors</span>, pero el backend no debe confiar solo en eso).</p>
+    <div class="callout">
+      <span class="eyebrow">Control de seguridad bloqueante</span>
+      <p>Toda aplicación consumidora debe estar <strong>registrada explícitamente</strong> —dominio autorizado y proveedor de pago habilitado para esa app— antes de poder usar el servicio. Si el dominio o la combinación app/proveedor no está registrada, la petición se rechaza <em>antes</em> de crear cualquier intención de pago. Este registro vive en el propio Orquestador, no solo como convención del Developer Portal.</p>
+    </div>
+
+    <div class="callout assumption">
+      <span class="eyebrow">Alcance confirmado — sin tarjeta por ahora</span>
+      <p>El primer proveedor real detrás de <span class="mono">PaymentProviderPort</span> es <strong>BDV Pago Móvil C2P</strong> (documentación de API de proveedor ya analizada). Tarjeta y tokenización quedan <strong>fuera de alcance</strong> en esta fase — <span class="mono">TokenReferencia</span>/<span class="mono">ProveedorTokenizacion</span> se documentan en el modelo como referencia futura, pero no se implementan hasta que el alcance se amplíe.</p>
+    </div>
+
+    <h3>Onion + Screaming + feature-sliced, en la práctica</h3>
+    <p>Tres decisiones que se refuerzan entre sí, no capas aisladas de un diagrama de libro:</p>
+    <ul>
+      <li><strong>Onion</strong> fija la dirección de las dependencias: el dominio de pagos no importa nada de Django, RabbitMQ ni del proveedor externo — son ellos los que dependen de puertos que el dominio define.</li>
+      <li><strong>Screaming Architecture</strong> decide qué grita la carpeta raíz: no <span class="mono">controllers/</span>, <span class="mono">services/</span>, <span class="mono">models/</span> (eso grita "Django"), sino <span class="mono">autorizacion/</span>, <span class="mono">conciliacion/</span>, <span class="mono">tokenizacion/</span> (eso grita "pagos").</li>
+      <li><strong>Feature-sliced</strong> es la unidad de corte: cada carpeta de negocio contiene sus propias capas de Onion completas — no un <span class="mono">domain/</span> ni un <span class="mono">infra/</span> compartidos por todo el sistema.</li>
+    </ul>
+    <pre class="tree">orquestador/
+├── autorizacion/          <span style="opacity:.55">← grita el caso de uso, no el framework</span>
+│   ├── domain/            <span style="opacity:.55">entidades + reglas, sin imports de Django</span>
+│   ├── application/       <span style="opacity:.55">casos de uso: AutorizarPago, RevertirPago</span>
+│   └── infra/             <span style="opacity:.55">TarjetaAdapter, PagoMovilAdapter, PasarelaInternacionalAdapter</span>
+├── conciliacion/
+│   ├── domain/
+│   ├── application/
+│   └── infra/             <span style="opacity:.55">consumer RabbitMQ, matching contra estados de cuenta</span>
+└── tokenizacion/
+    ├── domain/
+    ├── application/
+    └── infra/             <span style="opacity:.55">adaptador a la bóveda PCI certificada</span></pre>
+
+    <div class="callout">
+      <span class="eyebrow">Decisión de diseño</span>
+      <p>La frontera entre ambos servicios es un <strong>bus de eventos</strong>, no un endpoint REST. Si mañana la conciliación necesita reprocesar 6 meses de historial, lo hace releyendo el log de eventos — sin pedirle nada al orquestador ni arriesgar su disponibilidad.</p>
+    </div>
+  </section>
+
+  <section id="contexto">
+    <span class="eyebrow">02 — Diagrama de contexto</span>
+    <h2><span class="num">02</span> C4 Nivel 1 — Contexto de sistema</h2>
+    <p>El diagrama muestra la frontera que más importa: el camino <strong>síncrono</strong> de cobro (izquierda→derecha) y el camino <strong>asíncrono</strong> de conciliación (hacia abajo), que no comparte base de datos ni ciclo de vida con el orquestador.</p>
+
+    <figure>
+      <svg viewBox="0 0 920 560" role="img" aria-label="Diagrama de contexto: Conatel en Línea, Homologación y futuras apps llaman al API Gateway, que llama al Orquestador de Pagos; el Orquestador llama de forma síncrona a los proveedores de pago locales e internacionales y publica eventos de forma asíncrona a RabbitMQ; el Servicio de Conciliación consume esos eventos con su propia base de datos y reporta a bancos y al ERP contable, sin bloquear el flujo de cobro.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="arrowAccent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/>
+          </marker>
+        </defs>
+
+        <!-- font baseline -->
+        <g font-family="IBM Plex Mono, ui-monospace, Menlo, Consolas, monospace" font-size="12">
+
+        <!-- Apps consumidoras -->
+        <rect x="20" y="40" width="170" height="100" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <text x="105" y="62" text-anchor="middle" font-weight="700" font-size="12">Apps consumidoras</text>
+        <text x="105" y="82" text-anchor="middle" fill="currentColor" opacity=".7" font-size="10">Conatel en Línea (hoy)</text>
+        <text x="105" y="98" text-anchor="middle" fill="currentColor" opacity=".7" font-size="10">Homologación (hoy)</text>
+        <text x="105" y="114" text-anchor="middle" fill="currentColor" opacity=".7" font-size="10">Apps futuras (vía SDK)</text>
+
+        <!-- API Gateway -->
+        <rect x="250" y="40" width="170" height="100" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <text x="335" y="62" text-anchor="middle" font-weight="700" font-size="12">API Gateway</text>
+        <text x="335" y="82" text-anchor="middle" opacity=".7" font-size="10">REST / GraphQL</text>
+        <text x="335" y="98" text-anchor="middle" opacity=".7" font-size="10">Auth · rate limit</text>
+        <text x="335" y="114" text-anchor="middle" opacity=".7" font-size="10">Portal + Swagger/OpenAPI</text>
+
+        <!-- Orquestador -->
+        <rect x="480" y="20" width="210" height="150" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.8"/>
+        <text x="585" y="48" text-anchor="middle" font-weight="700" font-size="13" fill="var(--accent-ink)">Orquestador de Pagos</text>
+        <text x="585" y="66" text-anchor="middle" opacity=".8" font-size="10.5" fill="var(--accent-ink)">Onion · Django</text>
+        <text x="585" y="84" text-anchor="middle" opacity=".8" font-size="10.5" fill="var(--accent-ink)">tarjetas · Pago Móvil/C2P</text>
+        <text x="585" y="102" text-anchor="middle" opacity=".8" font-size="10.5" fill="var(--accent-ink)">transferencias · débito auto</text>
+        <text x="585" y="120" text-anchor="middle" opacity=".8" font-size="10.5" fill="var(--accent-ink)">pasarela internacional</text>
+        <text x="585" y="138" text-anchor="middle" opacity=".8" font-size="10.5" fill="var(--accent-ink)">DB propia (intención)</text>
+
+        <!-- Proveedores externos -->
+        <rect x="750" y="40" width="160" height="100" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="830" y="62" text-anchor="middle" font-weight="700" font-size="11.5">Proveedores</text>
+        <text x="830" y="80" text-anchor="middle" opacity=".7" font-size="9.5">Bancos · BCV</text>
+        <text x="830" y="96" text-anchor="middle" opacity=".7" font-size="9.5">Adquirentes locales</text>
+        <text x="830" y="112" text-anchor="middle" opacity=".7" font-size="9.5">Pasarela internacional</text>
+
+        <!-- Bus de eventos -->
+        <rect x="480" y="270" width="210" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <text x="585" y="294" text-anchor="middle" font-weight="700" font-size="12">Bus de eventos</text>
+        <text x="585" y="312" text-anchor="middle" opacity=".7" font-size="10.5">RabbitMQ · topic pago.*</text>
+
+        <!-- Conciliación -->
+        <rect x="480" y="390" width="210" height="120" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text x="585" y="414" text-anchor="middle" font-weight="700" font-size="12">Servicio de Conciliación</text>
+        <text x="585" y="434" text-anchor="middle" opacity=".7" font-size="10.5">consumidor Celery workers</text>
+        <text x="585" y="450" text-anchor="middle" opacity=".7" font-size="10.5">DB propia · matching</text>
+        <text x="585" y="466" text-anchor="middle" opacity=".7" font-size="10.5">no bloquea el cobro</text>
+        <text x="585" y="484" text-anchor="middle" font-weight="700" font-size="10" fill="var(--good)">objetivo: 5 días → 1 hora</text>
+
+        <!-- Bancos (para conciliación) -->
+        <rect x="750" y="390" width="160" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="830" y="413" text-anchor="middle" font-weight="700" font-size="11">Estados de cuenta</text>
+        <text x="830" y="430" text-anchor="middle" opacity=".7" font-size="9.5">bancos / pasarelas</text>
+
+        <!-- ERP contable -->
+        <rect x="750" y="460" width="160" height="50" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="830" y="482" text-anchor="middle" font-weight="700" font-size="11">ERP contable</text>
+        <text x="830" y="499" text-anchor="middle" opacity=".7" font-size="9.5">reporte final</text>
+
+        <!-- arrows sync path -->
+        <line x1="190" y1="90" x2="246" y2="90" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+        <text x="218" y="82" text-anchor="middle" font-size="9.5" opacity=".75">https</text>
+
+        <line x1="420" y1="90" x2="476" y2="90" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+        <text x="448" y="82" text-anchor="middle" font-size="9.5" opacity=".75">enruta</text>
+
+        <line x1="690" y1="90" x2="746" y2="90" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+        <text x="718" y="82" text-anchor="middle" font-size="9" opacity=".75">autoriza</text>
+        <text x="718" y="104" text-anchor="middle" font-size="9" opacity=".6">(síncrono)</text>
+
+        <!-- arrow orchestrator -> bus (accent, the key async hop) -->
+        <line x1="585" y1="170" x2="585" y2="266" stroke="var(--accent)" stroke-width="2" marker-end="url(#arrowAccent)"/>
+        <text x="600" y="197" font-size="10" fill="var(--accent-ink)" font-weight="700">publica pago.confirmado</text>
+        <text x="600" y="211" font-size="9" opacity=".75" fill="var(--accent-ink)">(asíncrono · no bloqueante)</text>
+
+        <!-- bus -> conciliación -->
+        <line x1="585" y1="330" x2="585" y2="386" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+        <text x="650" y="361" text-anchor="middle" font-size="9.5" opacity=".75">consume</text>
+
+        <!-- conciliación -> bancos / erp -->
+        <line x1="690" y1="410" x2="746" y2="408" stroke="currentColor" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="718" y="398" text-anchor="middle" font-size="9" opacity=".7">concilia</text>
+
+        <line x1="690" y1="470" x2="746" y2="478" stroke="currentColor" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="718" y="460" text-anchor="middle" font-size="9" opacity=".7">reporta</text>
+
+        <!-- divider labels -->
+        <text x="20" y="240" font-size="10" font-weight="700" fill="var(--accent-ink)">↓ frontera de desacople</text>
+        <line x1="20" y1="250" x2="900" y2="250" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 4" opacity=".5"/>
+
+        </g>
+      </svg>
+      <figcaption>Fig. 1 — El Orquestador nunca llama a Conciliación de forma directa: publica un evento y sigue. Conciliación vive detrás de esa frontera con su propia base de datos, por lo que un pico de conciliación o una caída de un banco no puede frenar un cobro en curso.</figcaption>
+    </figure>
+  </section>
+
+  <section id="stack">
+    <span class="eyebrow">03 — Stack técnico y estrategia de datos</span>
+    <h2><span class="num">03</span> Next.js, Django, y el rol real de RabbitMQ/Celery</h2>
+    <p>Confirmado el stack: <strong>Next.js</strong> para el Developer Portal y los BFF de cada app consumidora, <strong>Django</strong> para el Orquestador y Conciliación (Onion: dominio puro en el centro; carpetas organizadas por feature de negocio — screaming architecture — no por capa técnica de Django).</p>
+    <div class="callout">
+      <span class="eyebrow">Aclaración necesaria</span>
+      <p><strong>RabbitMQ y Celery no son alternativas — resuelven problemas distintos.</strong> RabbitMQ es el <em>broker</em>: el bus de eventos que separa Orquestador de Conciliación (la Fig. 1). Celery es el <em>framework de workers</em> que cada servicio Django usa para consumir esos mensajes y ejecutar trabajo en segundo plano.</p>
+      <p>Para el requisito crítico — que la conciliación no bloquee el cobro — necesitas el broker. Recomendación: <strong>RabbitMQ como bus de eventos entre servicios</strong> (contratos de evento versionados, colas durables, dead-letter queues), con <strong>Celery corriendo dentro de Conciliación</strong> como el runtime que consume esas colas. No se elige uno u otro; se usan juntos con roles distintos.</p>
+    </div>
+
+    <h3>¿Por qué no Rust? ¿Por qué no Redis como broker? ¿Por qué no CDC/Debezium?</h3>
+    <p>Tres decisiones de stack evaluadas explícitamente contra la alternativa, no fijadas por default:</p>
+    <ul>
+      <li><strong>Django, no Rust, para el 95% del sistema.</strong> El camino síncrono crítico (autorizar/capturar) es I/O-bound — el tiempo lo domina la latencia de red hacia el banco, no el lenguaje. Rust gana cuando el cuello de botella es cómputo puro, que no es el perfil de este MVP. <strong>Arquitectura híbrida confirmada:</strong> el motor de matching de Conciliación y el validador de balance del ledger de doble entrada quedan diseñados desde el día 1 detrás de un puerto explícito (<span class="mono">MatchingEnginePort</span>, <span class="mono">LedgerBalancePort</span>), para poder extraerse a Rust sin tocar el dominio el día que el volumen real lo justifique — no antes.</li>
+      <li><strong>RabbitMQ, no Redis, como bus de eventos.</strong> Redis Pub/Sub se descarta sin ambigüedad (no persiste nada; un evento se pierde en silencio si el consumidor está caído — justo el riesgo "doble contabilidad" de este roadmap). Redis Streams sí es una alternativa seria, pero el publisher confirm de RabbitMQ garantiza persistencia en disco/quorum <em>por defecto</em>, mientras que en Redis esa garantía requiere configuración explícita y es más fácil de configurar mal. Redis mantiene un rol futuro acotado: cache, locks distribuidos, rate limiting — nunca como broker.</li>
+      <li><strong>Poller Celery, no CDC/Debezium, para vaciar el outbox hacia RabbitMQ.</strong> Debezium encaja arquitectónicamente (es un adaptador de infraestructura intercambiable), pero un <em>replication slot</em> de CDC atascado puede hacer crecer el WAL de Postgres del propio Orquestador sin límite — un riesgo que ataca directamente el requisito de la Fig. 1. La latencia extra de milisegundos que ofrece CDC no aporta valor a un proceso cuyo objetivo es pasar de días a minutos. Ruta de evolución si el volumen lo exige: Debezium Server → RabbitMQ directo (sin Kafka), nunca Debezium+Kafka en paralelo a RabbitMQ.</li>
+    </ul>
+
+    <h3>Manejo de dinero</h3>
+    <p>Montos en <span class="mono">Decimal</span>/<span class="mono">NUMERIC</span> nativo (<span class="mono">DecimalField</span> de Django) — nunca <span class="mono">FloatField</span> ni el tipo <span class="mono">MONEY</span> nativo de Postgres (depende del <em>locale</em> de la instancia). Sin librería externa de manejo de dinero (<span class="mono">django-money</span> evaluada y descartada por ahora): el sistema no hace conversión de divisas, así que el problema que esas librerías resuelven mejor que <span class="mono">Decimal</span> puro —aritmética entre monedas distintas— no aplica aquí. El redondeo, cuando corresponda, vive en el dominio de la aplicación, nunca en la base de datos ni en agregaciones SQL implícitas.</p>
+
+    <h3>Base de datos por servicio</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Servicio</th><th>Datos que posee</th><th>Motor sugerido</th><th>Por qué separado</th></tr></thead>
+        <tbody>
+          <tr><td>Orquestador</td><td>Intenciones de pago, estado de transacción, tokens (referencia, no PAN)</td><td class="mono">PostgreSQL</td><td>Consistencia fuerte y baja latencia en el camino de cobro</td></tr>
+          <tr><td>Conciliación</td><td>Movimientos bancarios, matching, discrepancias, ledger contable</td><td class="mono">PostgreSQL (propia instancia)</td><td>Cargas por lotes y reprocesos no deben competir por I/O con el cobro en vivo</td></tr>
+          <tr><td>Bóveda de tokenización</td><td>PAN, datos sensibles PCI</td><td class="mono">Proveedor certificado PCI-DSS L1</td><td>Reduce el alcance de auditoría de todo lo demás a "no toca datos de tarjeta"</td></tr>
+          <tr><td>Developer Portal</td><td>API keys, métricas de uso, documentación</td><td class="mono">PostgreSQL o SaaS (Redoc/Stoplight)</td><td>No es transaccional; no debe compartir capacidad con el core</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <span class="eyebrow">Instancias separadas, no schemas — confirmado</span>
+      <p>Orquestador y Conciliación son <strong>instancias/procesos Postgres físicamente distintos</strong>, nunca dos schemas en la misma base. Con schemas compartidos, un reproceso batch pesado de Conciliación (ej. "releer 6 meses de historial") consumiría <span class="mono">shared_buffers</span>, WAL y ciclos de vacuum del mismo proceso que sirve al Orquestador — degradándolo exactamente en el escenario que la Fig. 1 dice que no debe poder pasar. Con schemas, además, un JOIN o FK cruzada entre servicios es técnicamente trivial de escribir; con bases separadas es estructuralmente imposible — la garantía la impone el motor, no la disciplina del equipo.</p>
+    </div>
+    <h3>CI/CD</h3>
+    <p>Pipeline por servicio (no monorepo desplegado como una unidad): build → pruebas de contrato del puerto hexagonal → pruebas de integración contra sandbox del proveedor → despliegue canario. El Orquestador y Conciliación se versionan y despliegan de forma completamente independiente desde T2.</p>
+  </section>
+
+  <section id="roadmap">
+    <span class="eyebrow">04 — Roadmap por trimestre</span>
+    <h2><span class="num">04</span> T1 → T4</h2>
+    <div class="callout assumption">
+      <span class="eyebrow">Supuesto a validar</span>
+      <p>Uso <strong>Homologación</strong> como piloto del strangler fig asumiendo que es el proceso de menor volumen y más aislado del resto del negocio — el candidato ideal para el primer canario, porque un error ahí cuesta menos que uno en <strong>Conatel en Línea</strong>. Si en realidad es al revés (Conatel en Línea tiene menor volumen o menor criticidad), invierte el orden en T2–T3.</p>
+    </div>
+
+    <div class="quarters">
+      <div class="qcard">
+        <div class="qhead"><span class="q">T1</span></div>
+        <h4>Técnico</h4>
+        <ul>
+          <li>ADRs de arquitectura hexagonal + contratos de puerto</li>
+          <li>Esqueleto Django (Orquestador) y Next.js (Portal/BFF)</li>
+          <li>Registro de aplicaciones/dominios autorizados (control de seguridad bloqueante, previo a cualquier intención de pago)</li>
+          <li>Selección de proveedor de tokenización (alcance PCI) — <em>diferido: sin tarjeta en el alcance actual, solo Pago Móvil/C2P</em></li>
+          <li>RabbitMQ + contrato de eventos <span class="mono">pago.*</span></li>
+          <li>CI/CD base por servicio</li>
+        </ul>
+        <h4>Producto</h4>
+        <ul>
+          <li>Integración Pago Móvil/C2P en sandbox</li>
+          <li>Piloto strangler fig: Homologación</li>
+        </ul>
+      </div>
+      <div class="qcard">
+        <div class="qhead"><span class="q">T2</span></div>
+        <h4>Técnico</h4>
+        <ul>
+          <li>Conciliación v1 (DB propia, consumo Celery async)</li>
+          <li>API Gateway + Swagger/OpenAPI en alpha</li>
+          <li>Idempotencia + outbox pattern en el Orquestador</li>
+        </ul>
+        <h4>Producto</h4>
+        <ul>
+          <li>Fachada strangler frente a Homologación (piloto)</li>
+          <li>Rollout canario 5–10% del tráfico de Homologación</li>
+          <li>Pago Móvil + tarjeta débito nacional en vivo</li>
+        </ul>
+      </div>
+      <div class="qcard">
+        <div class="qhead"><span class="q">T3</span></div>
+        <h4>Técnico</h4>
+        <ul>
+          <li>Ledger de doble entrada en Conciliación</li>
+          <li>Observabilidad: SLOs, trazas distribuidas, alertas</li>
+          <li>Preparación SAQ-D / pentest externo (QSA)</li>
+        </ul>
+        <h4>Producto</h4>
+        <ul>
+          <li>Débito automático (domiciliación)</li>
+          <li>Fachada strangler frente a Conatel en Línea (mayor volumen — canario más largo)</li>
+          <li>Developer Portal abierto a equipos internos</li>
+          <li>Conciliación &lt; 1h en el piloto</li>
+        </ul>
+      </div>
+      <div class="qcard">
+        <div class="qhead"><span class="q">T4</span></div>
+        <h4>Técnico</h4>
+        <ul>
+          <li>Simulacros de continuidad / DR</li>
+          <li>Auditoría PCI-DSS formal y certificación</li>
+          <li>Multi-adquirente (failover de proveedor)</li>
+        </ul>
+        <h4>Producto</h4>
+        <ul>
+          <li>Conatel en Línea 100% en el nuevo orquestador; legacy de pagos retirado</li>
+          <li>Medio de pago internacional (tarjetas cross-border) en vivo</li>
+          <li>Proveedores locales adicionales</li>
+          <li>KPIs objetivo verificados en producción</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Estrategia de rollout — Strangler Fig sin cortar el tráfico</h3>
+    <ol>
+      <li><strong>Fachada, no reemplazo.</strong> El nuevo Orquestador se pone delante del flujo de pago existente en Homologación; las llamadas siguen llegando al mismo endpoint que ya conocen sus usuarios.</li>
+      <li><strong>Bifurcación por bandera.</strong> Un porcentaje de transacciones (empezando en 5–10%) se enruta al nuevo orquestador; el resto sigue en el camino legacy hasta validar paridad.</li>
+      <li><strong>Paridad antes que expansión.</strong> Se compara conciliación y tasa de error del canal nuevo contra el legacy durante al menos dos ciclos de conciliación completos antes de subir el porcentaje.</li>
+      <li><strong>Apagado del legacy por app, no de golpe.</strong> Homologación se retira del camino viejo cuando su canario cierra en verde; recién entonces arranca el mismo proceso en Conatel en Línea — nunca un corte único para ambas.</li>
+    </ol>
+  </section>
+
+  <section id="critico">
+    <span class="eyebrow">05 — Ruta crítica</span>
+    <h2><span class="num">05</span> Dependencias que definen la fecha del MVP</h2>
+    <p>Estas doce actividades son las que, si se retrasan, mueven la fecha de cierre del MVP — todo lo demás en el roadmap tiene holgura.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th class="num">#</th><th>Actividad</th><th>Depende de</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td>Arquitectura objetivo + contratos de puerto (ADRs)</td><td class="num">—</td></tr>
+          <tr><td class="num">2</td><td>Proveedor de tokenización (reducción de alcance PCI) — <em>diferido, fuera del alcance actual sin tarjeta</em></td><td class="num">1</td></tr>
+          <tr><td class="num">3</td><td>Esqueleto hexagonal Orquestador (Django) + BFF (Next.js) + registro de aplicaciones/dominios</td><td class="num">1</td></tr>
+          <tr><td class="num">4</td><td>Bus de eventos RabbitMQ + contrato <span class="mono">pago.*</span></td><td class="num">3</td></tr>
+          <tr><td class="num">5</td><td>Integración Pago Móvil/C2P en sandbox</td><td class="num">2, 3</td></tr>
+          <tr><td class="num">6</td><td>Conciliación v1 (DB propia, consumo async)</td><td class="num">4</td></tr>
+          <tr><td class="num">7</td><td>Fachada strangler sobre Homologación (piloto)</td><td class="num">5</td></tr>
+          <tr><td class="num">8</td><td>Rollout canario 5–10% en Homologación</td><td class="num">7</td></tr>
+          <tr><td class="num">9</td><td>Hardening PCI-DSS (SAQ-D, pentest)</td><td class="num">2, 5</td></tr>
+          <tr><td class="num">10</td><td>Migración de Conatel en Línea + medio de pago internacional + Developer Portal público</td><td class="num">8</td></tr>
+          <tr><td class="num">11</td><td>Auditoría PCI-DSS formal y certificación</td><td class="num">9, 10</td></tr>
+          <tr><td class="num">12</td><td>Go-live PaaS general / cierre de MVP</td><td class="num">11</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="gobernanza">
+    <span class="eyebrow">06 — Gobernanza y equipo</span>
+    <h2><span class="num">06</span> Gobernanza</h2>
+    <ul>
+      <li><strong>Comité de cambio quincenal</strong> con dueños de cada app consumidora — el strangler fig fracasa si las apps legacy se enteran del corte de tráfico después del hecho.</li>
+      <li><strong>Dueño único de los contratos de evento</strong> (Tech Lead): un cambio de esquema en <span class="mono">pago.confirmado</span> rompe Conciliación en silencio si no pasa por un registro de esquemas versionado.</li>
+      <li><strong>Revisión de alcance PCI-DSS trimestral</strong> con Seguridad — el alcance crece solo si algo nuevo toca datos de tarjeta; debe ser una decisión explícita, no un accidente de diseño.</li>
+    </ul>
+  </section>
+
+  <section id="riesgos">
+    <span class="eyebrow">07 — Riesgos críticos</span>
+    <h2><span class="num">07</span> Lo que puede salir mal, y el plan si sale mal</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Riesgo</th><th>Severidad</th><th>Mitigación</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Latencia del Orquestador degrada checkout de las apps</td>
+            <td><span class="tag high">Alta</span></td>
+            <td>Timeouts agresivos + circuit breaker por proveedor; confirmación asíncrona con estado "pendiente" en vez de bloquear la respuesta al usuario</td>
+          </tr>
+          <tr>
+            <td>Doble contabilidad / discrepancias entre Orquestador y Conciliación</td>
+            <td><span class="tag high">Alta</span></td>
+            <td>Idempotency keys en cada evento, patrón outbox para publicar exactamente-una-vez, matching automático con alerta ante cualquier diferencia &gt; 0</td>
+          </tr>
+          <tr>
+            <td>Caída de un proveedor externo (banco, adquirente, pasarela)</td>
+            <td><span class="tag high">Alta</span></td>
+            <td>Multi-adquirente con failover automático, cola de reintentos con backoff exponencial, modo degradado que informa al usuario en vez de fallar en silencio</td>
+          </tr>
+          <tr>
+            <td>Ampliación no controlada del alcance PCI-DSS</td>
+            <td><span class="tag med">Media</span></td>
+            <td>Tokenización desde el día 1; el PAN nunca toca infraestructura propia; revisión de alcance trimestral</td>
+          </tr>
+          <tr>
+            <td>Riesgo cambiario / cambios en normativa BCV — más presente al sumar el medio de pago internacional en T4 (conversión USD↔Bs)</td>
+            <td><span class="tag med">Media</span></td>
+            <td>Servicio de tasa desacoplado del dominio de pago; tasa oficial BCV congelada por transacción con timestamp auditable; liquidación internacional aislada en su propio adaptador para no arrastrar el riesgo cambiario al resto de medios de pago</td>
+          </tr>
+          <tr>
+            <td>Resistencia organizacional al strangler (apps no quieren ceder tráfico)</td>
+            <td><span class="tag med">Media</span></td>
+            <td>Quick win visible en T2 (conciliación de horas, no días) + comité de cambio con dueños de cada app desde T1</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="kpis">
+    <span class="eyebrow">08 — Métricas de éxito</span>
+    <h2><span class="num">08</span> KPIs del MVP</h2>
+    <div class="kpis">
+      <div class="kpi">
+        <span class="eyebrow">Conciliación</span>
+        <div class="from-to"><span class="from">5 días</span><span class="arrow">→</span><span class="to">1 hora</span></div>
+        <div class="desc">Tiempo entre cierre de transacción y conciliación contable confirmada</div>
+      </div>
+      <div class="kpi">
+        <span class="eyebrow">Disponibilidad</span>
+        <div class="from-to"><span class="to">99.9%</span></div>
+        <div class="desc">SLO del Orquestador — ≈ 43 min de indisponibilidad tolerada al mes</div>
+      </div>
+      <div class="kpi">
+        <span class="eyebrow">Conversión de pago</span>
+        <div class="from-to"><span class="from">baseline T1</span><span class="arrow">→</span><span class="to">+15%</span></div>
+        <div class="desc">Contra el flujo legacy de la app piloto, medido en el canario</div>
+      </div>
+      <div class="kpi">
+        <span class="eyebrow">Onboarding de nueva app</span>
+        <div class="from-to"><span class="to">&lt; 2 sem.</span></div>
+        <div class="desc">De solicitud de API key a primera transacción en sandbox, vía portal</div>
+      </div>
+      <div class="kpi">
+        <span class="eyebrow">Alcance PCI</span>
+        <div class="from-to"><span class="to">100%</span></div>
+        <div class="desc">Transacciones tokenizadas — 0% de PAN en infraestructura propia</div>
+      </div>
+      <div class="kpi">
+        <span class="eyebrow">MTTR incidentes</span>
+        <div class="from-to"><span class="to">&lt; 30 min</span></div>
+        <div class="desc">Desde alerta hasta mitigación, con el nuevo stack de observabilidad</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Dossier de planificación · Suite Centralizada de Pagos · Conatel — preparado como insumo de arquitectura, no como compromiso contractual de alcance o fecha.
+  </footer>
+
+</div>

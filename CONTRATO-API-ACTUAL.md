@@ -92,8 +92,12 @@ individual, o agregar un segundo dominio/proveedor a una app ya creada.
 
 1. ~~CRUD de registro de apps/dominios~~ — **RESUELTO** (ver sección Admin arriba).
    `suit-portal` puede reemplazar su mock por el endpoint real.
-2. **Auth JWT de `suit-orquestador`** — si el panel (`suit-frontend`) necesita
-   ver datos del Orquestador (no solo Conciliación), ese backend no tiene login
-   propio de usuario final todavía (solo `TokenAuthentication` para admin/M2M).
-   A definir si el panel solo lee de Conciliación por ahora.
-3. **Swagger de `suit-orquestador`** — no configurado (sí en Conciliación).
+2. ~~Auth JWT de `suit-orquestador`~~ — **RESUELTO por decisión**: `suit-frontend`
+   solo lee de `suit-conciliacion` por ahora — no existe ninguna vista del panel
+   que necesite datos crudos del Orquestador (transacciones/intenciones de pago
+   en curso), solo discrepancias/eventos/ledger de Conciliación. `suit-orquestador`
+   mantiene únicamente `TokenAuthentication` para admin/M2M (registro de apps).
+   Si en el futuro el panel necesita una vista de pagos en vivo del Orquestador,
+   se revisita como una decisión nueva, no se construye por anticipado.
+3. ~~Swagger de `suit-orquestador`~~ — **RESUELTO** (Bloque #9, `drf-spectacular`
+   agregado, mismo patrón que Conciliación).

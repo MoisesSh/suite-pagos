@@ -73,6 +73,10 @@ services:
     env_file: ../suit-orquestador/.env
     environment:
       DB_HOST: postgres-orquestador
+      DB_NAME: ${ORQUESTADOR_DB_NAME:-orquestador_pagos}
+      DB_USER: ${ORQUESTADOR_DB_USER:-postgres}
+      DB_PASSWORD: ${ORQUESTADOR_DB_PASSWORD}
+      CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
     ports:
       - "8001:8000"
 
@@ -111,6 +115,18 @@ services:
       DATABASE_URL: postgres://${CONCILIACION_DB_USER:-postgres}:${CONCILIACION_DB_PASSWORD}@postgres-conciliacion:5432/${CONCILIACION_DB_NAME:-conciliacion_pagos}
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
 
+  flower:
+    image: mher/flower:2.0
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+      FLOWER_PORT: 5555
+    ports:
+      - "5555:5555" # monitoreo de tareas Celery — solo dev/staging, sin auth propia
+
   suit-frontend:
     build:
       context: ..
@@ -122,7 +138,10 @@ services:
     depends_on:
       - suit-orquestador
       - suit-conciliacion
-    env_file: ../suit-frontend/.env.local
+    env_file: ../suit-frontend/.env
+    environment:
+      CONCILIACION_API_URL: http://suit-conciliacion:8000
+      NEXTAUTH_URL: http://localhost:3000
     ports:
       - "3000:3000"
 
@@ -136,7 +155,10 @@ services:
     restart: unless-stopped
     depends_on:
       - suit-orquestador
-    env_file: ../suit-portal/.env.local
+    env_file: ../suit-portal/.env
+    environment:
+      ORQUESTADOR_API_URL: http://suit-orquestador:8000
+      NEXT_PUBLIC_CONCILIACION_DOCS_URL: http://localhost:8002/api/docs/
     ports:
       - "3001:3000"
 

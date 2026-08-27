@@ -11,6 +11,7 @@ servicio vía `--build-arg SERVICE_DIR=<carpeta>`.
 | `postgres-orquestador` | Postgres 17 | interno | `orquestador_pagos` |
 | `postgres-conciliacion` | Postgres 17 | interno | `conciliacion_pagos` |
 | `rabbitmq` | RabbitMQ 4.3 (management) | 15672 (UI) | — |
+| `flower` | Monitoreo de tareas Celery | 5555 (UI) | — |
 | `suit-orquestador` | Django/DRF | 8001 | `postgres-orquestador` |
 | `suit-conciliacion` | Django/DRF | 8002 | `postgres-conciliacion` |
 | `suit-conciliacion-celery-worker` | Celery worker | — | (comparte DB de conciliación) |

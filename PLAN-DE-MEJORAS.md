@@ -5,7 +5,49 @@
 > antes de recibir la orden de ejecución del coordinador. Se agrega un bloque nuevo
 > cada vez que un agente propone el siguiente incremento de trabajo.
 
-Última actualización: 2026-08-27 12:30
+Última actualización: 2026-08-27 18:15
+
+---
+
+## Bloque #10 — Verificación de despliegue completo con Docker ✅ COMPLETADO — HITO FINAL
+
+**Ejecutado por:** coordinador · **Estado:** los 8 servicios levantados y verificados
+
+`docker compose -p suit-pagos -f deploy/docker-compose.yml up -d` — build de las
+5 imágenes propias + `postgres-orquestador`, `postgres-conciliacion`, `rabbitmq`
+(management), `flower` (monitoreo de Celery, agregado a pedido). Los 8 contenedores
+saludables, smoke test HTTP contra cada uno:
+
+| Servicio | URL | Resultado |
+|---|---|---|
+| `suit-orquestador` | `:8001/api/schema/` | 200 |
+| `suit-conciliacion` | `:8002/api/docs/` | 200 |
+| `suit-frontend` | `:3000` | 302 → `/login` (esperado, ruta protegida) |
+| `suit-portal` | `:3001` | 200 |
+| RabbitMQ management | `:15672` | 200 |
+| Flower | `:5555` | 200 |
+
+**Bug real encontrado y corregido en el camino:** la migración
+`0003_ledger_balance_trigger.py` de `suit-conciliacion` nunca se había probado
+contra Postgres real (el smoke test local usó SQLite, donde el trigger es un
+no-op) — al correr contra `postgres-conciliacion` en Docker, `RAISE EXCEPTION
+'... % ...'` (placeholder propio de PL/pgSQL) chocaba con el parseo de
+parámetros de psycopg3 en `schema_editor.execute()`. Fix correcto: `params=None`
+explícito en las 4 llamadas SQL de la migración (no escapar `%%`, que también
+falla en esta versión de psycopg). Test de regresión nuevo agregado
+(`test_ledger_balance_trigger.py`, `TransactionTestCase` porque el trigger es
+`DEFERRABLE INITIALLY DEFERRED`).
+
+**Nota sobre `deploy/.env` y variables de compose:** `postgres-orquestador` y
+`postgres-conciliacion` son bases Docker nuevas, distintas de las que usan los
+backends en desarrollo local directo (venv + Postgres del host) — el nombre
+de base del Orquestador en Docker es `orquestador_pagos` vía override explícito
+en el `environment:` del servicio (evitar reintroducir el mismo desajuste).
+
+**Sentry:** evaluado, decisión pospuesta — self-hosted requiere ~10 contenedores
+adicionales (Postgres, Kafka, ClickHouse, workers propios), desproporcionado
+para el estado actual del proyecto. Se retoma cuando haya un DSN real (SaaS o
+self-hosted externo) para conectar solo el SDK, sin agregar infraestructura.
 
 ---
 

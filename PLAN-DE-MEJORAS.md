@@ -83,6 +83,48 @@ entorno containerizado):
    y recreate explícito. **Lección operativa:** un solo lado (coordinador)
    debe correr `docker compose` sobre este proyecto a la vez.
 
+---
+
+## Bloque #12 — Formulario de cobro embebido por iframe ✅ COMPLETADO
+
+**Propuesto por:** `suit-backend` · **Estado:** ejecutado y verificado (77/77 tests, servidor real de prueba corriendo)
+
+**Alcance:** `GET /api/autorizacion/cobro/formulario/?checkout_token=...` — vista
+server-rendered (Django, sin SPA) que sirve el formulario real de cobro C2P
+(cédula/teléfono → OTP → confirmar), embebible por iframe en apps consumidoras.
+
+**Corrección de seguridad aplicada antes de construir la vista** (encontrada
+al revisar el plan inicial, no en el research previo): el monto a cobrar
+**no puede viajar en un query param editable por el navegador** — el OTP
+autentica al pagador, no valida que el monto sea el que la app realmente
+factura; un pagador técnico podría auto-reducirse su propia factura editando
+la URL del iframe. Fix: `ValidarAccesoRequestSerializer` ahora exige
+`monto`/`moneda`/`concepto` al iniciar el checkout, atados criptográficamente
+dentro del `checkout_token` (mismo mecanismo de firma que `aplicacion_id`/
+`proveedor_codigo`). `EjecutarCobroRequestSerializer` ya **no acepta** esos
+campos — el cobro real siempre usa lo que dice el token verificado, nunca el
+body del submit. Test de regresión específico:
+`test_monto_del_body_se_ignora_se_usa_el_del_checkout_token`.
+
+**Seguridad de iframe** (`research-seguridad-iframe.md` aplicado):
+- `Content-Security-Policy: frame-ancestors <dominio>:*` armado por request
+  contra los `DominioPermitido` activos de la app — nunca estático. Wildcard
+  de puerto porque `DominioPermitido.dominio` no guarda puerto.
+- Origin (preferido) o Referer (fallback) validados contra esa misma lista;
+  si no matchea, `403` sin CSP permisiva. Si ninguno viene, se permite —
+  `frame-ancestors` queda como control primario (defensa en profundidad, no
+  única barrera).
+- `X-Frame-Options: SAMEORIGIN` solo en esta vista (fallback legacy), resto
+  del proyecto sigue en `DENY` por default de Django.
+- `postMessage` con `targetOrigin` exacto (el Origin/Referer capturado) —
+  nunca `'*'`; si no se pudo determinar el origen, no se manda ningún mensaje.
+
+**Verificado en vivo** contra un servidor real (`localhost:8010`): CSP
+correcta (`frame-ancestors localhost:*`), `postMessage` con `parentOrigin`
+exacto, llamada de OTP real contra BDV QA (`{"resultado":"otp_enviado"}`).
+Página de prueba standalone con el iframe embebido real, lista para abrir en
+navegador (checkout_token vence a los 15 min).
+
 **Verificación final, contra contenedores reales:**
 - Login real de `hmachado` vía NextAuth → 302 a `/`, cookies de sesión y
   refresh seteadas correctamente.

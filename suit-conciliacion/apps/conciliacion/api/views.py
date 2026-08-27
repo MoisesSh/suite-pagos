@@ -1,6 +1,6 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import filters, generics, status, views
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.conciliacion.api.serializers import (
@@ -33,7 +33,11 @@ class DiscrepanciaListView(generics.ListAPIView):
 
 
 class DiscrepanciaResolverView(views.APIView):
-    permission_classes = [IsAuthenticated]
+    # IsAdminUser (request.user.is_staff): resolver discrepancias es una acción
+    # que muta datos de conciliación/auditoría — el staff de solo consulta
+    # (is_staff=False) puede ver, no resolver. Ver decisión con el coordinador
+    # sobre gestión de usuarios (Django admin, sin modelo de roles nuevo).
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     @extend_schema(
         request=DiscrepanciaResolverSerializer,

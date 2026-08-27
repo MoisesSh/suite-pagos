@@ -83,7 +83,22 @@ class DiscrepanciaListViewTests(BaseAPITestCase):
 class DiscrepanciaResolverViewTests(BaseAPITestCase):
     def setUp(self):
         super().setUp()
-        self.usuario = factories.crear_usuario()
+        # is_staff=True: resolver es una acción de mutación de datos de
+        # conciliación/auditoría, restringida a staff (IsAdminUser) — un
+        # Usuario de solo consulta (is_staff=False) puede listar, no resolver.
+        self.usuario = factories.crear_usuario(is_staff=True)
+
+    def test_staff_de_solo_consulta_no_puede_resolver(self):
+        usuario_solo_consulta = factories.crear_usuario(is_staff=False)
+        discrepancia = _crear_discrepancia()
+        self.client.force_authenticate(usuario_solo_consulta)
+
+        response = self.client.patch(
+            f'/api/conciliacion/discrepancias/{discrepancia.id}/resolver/',
+            {'estado_resolucion': 'resuelta'}, format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_resolver_discrepancia_marca_resuelta_por_usuario_autenticado(self):
         discrepancia = _crear_discrepancia()

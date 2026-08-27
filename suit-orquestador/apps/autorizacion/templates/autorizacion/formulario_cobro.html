@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Cobro Pago Móvil</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.25rem; color: #1a1a1a; }
+  .monto { font-size: 1.4rem; font-weight: 600; margin-bottom: 1rem; }
+  .concepto { color: #555; margin-bottom: 1.25rem; }
+  label { display: block; font-size: 0.85rem; margin-bottom: 0.25rem; color: #333; }
+  input { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-bottom: 0.9rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+  button { width: 100%; padding: 0.6rem; border: none; border-radius: 4px; background: #0a5c36; color: white; font-size: 1rem; cursor: pointer; }
+  button:disabled { background: #9ab; cursor: not-allowed; }
+  .oculto { display: none; }
+  .mensaje { margin-top: 0.9rem; font-size: 0.9rem; }
+  .mensaje.error { color: #a02020; }
+  .mensaje.exito { color: #0a5c36; }
+</style>
+</head>
+<body>
+  <div class="monto">{{ moneda }} {{ monto }}</div>
+  <div class="concepto">{{ concepto }}</div>
+
+  <form id="form-datos">
+    <label for="cedula">Cédula del pagador</label>
+    <input type="text" id="cedula" placeholder="V12345678" required>
+
+    <label for="telefono">Teléfono afiliado a Pago Móvil</label>
+    <input type="text" id="telefono" placeholder="04121234567" required>
+
+    <button type="submit" id="btn-otp">Solicitar clave (OTP)</button>
+  </form>
+
+  <form id="form-otp" class="oculto">
+    <label for="otp">Clave OTP recibida por SMS</label>
+    <input type="text" id="otp" required>
+
+    <button type="submit" id="btn-confirmar">Confirmar cobro</button>
+  </form>
+
+  <div id="mensaje" class="mensaje"></div>
+
+{{ datos_formulario|json_script:"datos-formulario" }}
+<script>
+(function () {
+  'use strict';
+
+  var datos = JSON.parse(document.getElementById('datos-formulario').textContent);
+  var CHECKOUT_TOKEN = datos.checkoutToken;
+  var PROVEEDOR = datos.proveedor;
+  var BANCO_CODIGO = datos.bancoCodigo;
+  var PARENT_ORIGIN = datos.parentOrigin; // null si no se pudo determinar el embebedor
+  var idempotencyKey = crypto.randomUUID();
+
+  var formDatos = document.getElementById('form-datos');
+  var formOtp = document.getElementById('form-otp');
+  var mensajeEl = document.getElementById('mensaje');
+  var btnOtp = document.getElementById('btn-otp');
+  var btnConfirmar = document.getElementById('btn-confirmar');
+
+  function mostrarMensaje(texto, tipo) {
+    mensajeEl.textContent = texto;
+    mensajeEl.className = 'mensaje ' + (tipo || '');
+  }
+
+  // Nunca targetOrigin '*' (research-seguridad-iframe.md sección 4) — si no se
+  // pudo determinar el origen real del embebedor en la carga del iframe, no se
+  // manda ningún postMessage en vez de arriesgar un wildcard.
+  function notificarPadre(type, payload) {
+    if (!PARENT_ORIGIN || !window.parent || window.parent === window) return;
+    window.parent.postMessage({ type: type, version: 1, payload: payload }, PARENT_ORIGIN);
+  }
+
+  formDatos.addEventListener('submit', function (evento) {
+    evento.preventDefault();
+    btnOtp.disabled = true;
+    mostrarMensaje('Solicitando clave...', '');
+
+    fetch('/api/autorizacion/cobro/otp/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        checkout_token: CHECKOUT_TOKEN,
+        proveedor: PROVEEDOR,
+        cedula_pagador: document.getElementById('cedula').value,
+      }),
+    })
+      .then(function (respuesta) {
+        return respuesta.json().then(function (cuerpo) { return { ok: respuesta.ok, cuerpo: cuerpo }; });
+      })
+      .then(function (resultado) {
+        btnOtp.disabled = false;
+        if (!resultado.ok) {
+          mostrarMensaje('No se pudo enviar la clave: ' + (resultado.cuerpo.error || 'error desconocido'), 'error');
+          return;
+        }
+        mostrarMensaje('Clave enviada por SMS.', 'exito');
+        formDatos.classList.add('oculto');
+        formOtp.classList.remove('oculto');
+      })
+      .catch(function () {
+        btnOtp.disabled = false;
+        mostrarMensaje('No se pudo contactar al servidor. Reintentá.', 'error');
+      });
+  });
+
+  formOtp.addEventListener('submit', function (evento) {
+    evento.preventDefault();
+    btnConfirmar.disabled = true;
+    mostrarMensaje('Procesando cobro...', '');
+
+    fetch('/api/autorizacion/cobro/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        checkout_token: CHECKOUT_TOKEN,
+        proveedor: PROVEEDOR,
+        idempotency_key: idempotencyKey,
+        cedula_pagador: document.getElementById('cedula').value,
+        telefono_pagador: document.getElementById('telefono').value,
+        banco_codigo: BANCO_CODIGO,
+        otp: document.getElementById('otp').value,
+      }),
+    })
+      .then(function (respuesta) {
+        return respuesta.json().then(function (cuerpo) { return { status: respuesta.status, ok: respuesta.ok, cuerpo: cuerpo }; });
+      })
+      .then(function (resultado) {
+        btnConfirmar.disabled = false;
+        if (resultado.ok) {
+          mostrarMensaje('Pago exitoso. Referencia: ' + resultado.cuerpo.referencia_corta, 'exito');
+          notificarPadre('pago.completado', resultado.cuerpo);
+        } else {
+          mostrarMensaje('El cobro no se pudo completar: ' + (resultado.cuerpo.error || 'error desconocido'), 'error');
+          notificarPadre('pago.error', { status: resultado.status, detalle: resultado.cuerpo });
+        }
+      })
+      .catch(function () {
+        btnConfirmar.disabled = false;
+        mostrarMensaje('No se pudo contactar al servidor. Reintentá.', 'error');
+        notificarPadre('pago.error', { status: 0, detalle: { error: 'sin_conexion' } });
+      });
+  });
+})();
+</script>
+</body>
+</html>

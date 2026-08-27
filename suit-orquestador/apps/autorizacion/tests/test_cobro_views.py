@@ -17,8 +17,6 @@ from apps.autorizacion.tests.base import BaseAPITestCase
 
 COBRO_BODY_BASE = {
     'proveedor': 'BDV',
-    'monto': '1000.60',
-    'moneda': 'VES',
     'cedula_pagador': 'V12345678',
     'telefono_pagador': '04125692243',
     'banco_codigo': '0102',
@@ -37,7 +35,11 @@ class _ConCatalogoYToken(BaseAPITestCase):
         self.aplicacion = AplicacionRegistrada.objects.create(nombre='Conatel en Línea', app_origen_id=uuid.uuid4())
         DominioPermitido.objects.create(aplicacion=self.aplicacion, dominio='conatel.gob.ve')
         AplicacionProveedorPermitido.objects.create(aplicacion=self.aplicacion, proveedor=self.proveedor)
-        self.checkout_token = CheckoutTokenService.generar(aplicacion_id=self.aplicacion.id, proveedor_codigo='BDV')
+        # monto/moneda quedan atados acá — es la fuente de verdad para /cobro/, el
+        # body del submit no los acepta (ver EjecutarCobroRequestSerializer).
+        self.checkout_token = CheckoutTokenService.generar(
+            aplicacion_id=self.aplicacion.id, proveedor_codigo='BDV', monto='1000.60', moneda='VES',
+        )
 
 
 class SolicitarOtpViewTests(_ConCatalogoYToken):
@@ -125,7 +127,10 @@ class EjecutarCobroViewTests(_ConCatalogoYToken):
     def test_idempotency_key_con_payload_distinto_responde_409(self):
         idem_key = str(uuid.uuid4())
         body1 = {**COBRO_BODY_BASE, 'checkout_token': self.checkout_token, 'idempotency_key': idem_key}
-        body2 = {**COBRO_BODY_BASE, 'checkout_token': self.checkout_token, 'idempotency_key': idem_key, 'monto': '2000.00'}
+        body2 = {
+            **COBRO_BODY_BASE, 'checkout_token': self.checkout_token, 'idempotency_key': idem_key,
+            'telefono_pagador': '04129999999',
+        }
 
         with patch('apps.autorizacion.api.views.BDVPagoMovilC2PAdapter') as MockAdapter:
             MockAdapter.return_value.procesar_cobro.return_value = self._resultado_cobro_exitoso()
@@ -133,6 +138,28 @@ class EjecutarCobroViewTests(_ConCatalogoYToken):
             response = self.client.post('/api/autorizacion/cobro/', body2)
 
         self.assertEqual(response.status_code, 409)
+
+    @patch('apps.autorizacion.api.views.BDVPagoMovilC2PAdapter')
+    def test_monto_del_body_se_ignora_se_usa_el_del_checkout_token(self, MockAdapter):
+        """Vector de fraude cerrado: el OTP autentica al pagador, no valida el monto.
+        Un 'monto' inyectado en el body del submit (ej. editando la URL/request del
+        iframe) no debe tener ningún efecto — el monto real cobrado es siempre el
+        atado criptográficamente al checkout_token."""
+        adaptador_mock = MockAdapter.return_value
+        adaptador_mock.procesar_cobro.return_value = self._resultado_cobro_exitoso()
+        body = {
+            **COBRO_BODY_BASE, 'checkout_token': self.checkout_token, 'idempotency_key': str(uuid.uuid4()),
+            'monto': '1.00', 'moneda': 'USD',  # ignorados por el serializer — ni siquiera son campos válidos
+        }
+
+        response = self.client.post('/api/autorizacion/cobro/', body)
+
+        self.assertEqual(response.status_code, 200)
+        pago = IntencionPago.objects.get(id=response.data['pago_id'])
+        self.assertEqual(str(pago.monto), '1000.60')
+        self.assertEqual(pago.moneda.codigo, 'VES')
+        monto_enviado_al_proveedor = adaptador_mock.procesar_cobro.call_args.kwargs['monto']
+        self.assertEqual(monto_enviado_al_proveedor, pago.monto)
 
     def test_checkout_token_invalido_responde_401(self):
         body = {**COBRO_BODY_BASE, 'checkout_token': 'token-basura', 'idempotency_key': str(uuid.uuid4())}

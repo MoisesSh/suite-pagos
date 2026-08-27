@@ -110,16 +110,30 @@ class ValidarAccesoViewTests(BaseAPITestCase):
 
     def test_acceso_autorizado_responde_200_con_checkout_token(self):
         response = self.client.post(
-            '/api/autorizacion/validar-acceso/', {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV'},
+            '/api/autorizacion/validar-acceso/',
+            {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'monto': '1000.60', 'moneda': 'VES'},
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data['autorizado'])
         self.assertEqual(response.data['aplicacion'], 'Conatel en Línea')
         self.assertTrue(response.data['checkout_token'])
 
+    def test_checkout_token_ata_monto_moneda_no_editables_despues(self):
+        from apps.autorizacion.application.services import CheckoutTokenService
+
+        response = self.client.post(
+            '/api/autorizacion/validar-acceso/',
+            {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'monto': '1000.60', 'moneda': 'VES', 'concepto': 'Factura #1'},
+        )
+        payload = CheckoutTokenService.verificar(response.data['checkout_token'])
+        self.assertEqual(payload['monto'], '1000.60')
+        self.assertEqual(payload['moneda'], 'VES')
+        self.assertEqual(payload['concepto'], 'Factura #1')
+
     def test_acceso_no_autorizado_responde_403_con_motivo(self):
         response = self.client.post(
-            '/api/autorizacion/validar-acceso/', {'dominio': 'desconocido.com', 'proveedor': 'BDV'},
+            '/api/autorizacion/validar-acceso/',
+            {'dominio': 'desconocido.com', 'proveedor': 'BDV', 'monto': '1000.60', 'moneda': 'VES'},
         )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(response.data['autorizado'])
@@ -127,4 +141,10 @@ class ValidarAccesoViewTests(BaseAPITestCase):
 
     def test_payload_invalido_responde_400(self):
         response = self.client.post('/api/autorizacion/validar-acceso/', {'dominio': 'conatel.gob.ve'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_payload_sin_monto_responde_400(self):
+        response = self.client.post(
+            '/api/autorizacion/validar-acceso/', {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'moneda': 'VES'},
+        )
         self.assertEqual(response.status_code, 400)

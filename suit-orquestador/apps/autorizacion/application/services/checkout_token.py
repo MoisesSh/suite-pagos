@@ -16,12 +16,26 @@ class CheckoutTokenService:
     dentro del iframe, refleja el origen del propio formulario del Orquestador,
     no el de la app consumidora que lo embebe — por eso esa identidad no puede
     re-derivarse del header en cada submit. Se captura una sola vez en la
-    validación inicial y viaja firmada en este token."""
+    validación inicial y viaja firmada en este token.
+
+    `monto`/`moneda`/`concepto` viajan atados criptográficamente acá, no en el
+    body del submit de /cobro/: el OTP autentica al pagador, no valida que el
+    monto sea el que la app realmente factura — sin esto, un pagador técnico
+    podría editar el monto en el request de cobro y bajarse su propia factura.
+    La app consumidora los declara al iniciar el checkout (ValidarAccesoView),
+    momento en el que ya sabe cuánto está facturando."""
 
     @staticmethod
-    def generar(*, aplicacion_id, proveedor_codigo):
+    def generar(*, aplicacion_id, proveedor_codigo, monto, moneda, concepto='Pago'):
         return signing.dumps(
-            {'aplicacion_id': str(aplicacion_id), 'proveedor_codigo': proveedor_codigo}, salt=SALT,
+            {
+                'aplicacion_id': str(aplicacion_id),
+                'proveedor_codigo': proveedor_codigo,
+                'monto': str(monto),
+                'moneda': moneda,
+                'concepto': concepto,
+            },
+            salt=SALT,
         )
 
     @staticmethod

@@ -1,9 +1,12 @@
+from decimal import Decimal
+
 from django.conf import settings
 from rest_framework import status, views
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
+from apps.autorizacion.api.checkout_token_resolver import resolver_checkout_token
 from apps.autorizacion.api.serializers import (
     EjecutarCobroRequestSerializer,
     SolicitarOtpRequestSerializer,
@@ -11,7 +14,6 @@ from apps.autorizacion.api.serializers import (
 )
 from apps.autorizacion.application.services import (
     AccesoNoAutorizadoError,
-    CheckoutTokenInvalidoError,
     CheckoutTokenService,
     FlujoCobroC2PService,
     IdempotencyConflictError,
@@ -54,36 +56,16 @@ class ValidarAccesoView(views.APIView):
             return Response({'autorizado': False, 'motivo': exc.motivo}, status=status.HTTP_403_FORBIDDEN)
 
         checkout_token = CheckoutTokenService.generar(
-            aplicacion_id=aplicacion.id, proveedor_codigo=serializer.validated_data['proveedor'],
+            aplicacion_id=aplicacion.id,
+            proveedor_codigo=serializer.validated_data['proveedor'],
+            monto=serializer.validated_data['monto'],
+            moneda=serializer.validated_data['moneda'],
+            concepto=serializer.validated_data['concepto'],
         )
         return Response(
             {'autorizado': True, 'aplicacion': aplicacion.nombre, 'checkout_token': checkout_token},
             status=status.HTTP_200_OK,
         )
-
-
-def _resolver_checkout_token(checkout_token, proveedor_codigo):
-    """Común a ambos endpoints de cobro: valida la firma/vigencia del token, que el
-    proveedor solicitado coincida con el autorizado en el token, y re-valida
-    app/proveedor por si la autorización cambió entre la emisión del token y este
-    submit (el token puede vivir hasta CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS). Devuelve
-    (aplicacion, None) o (None, Response) con el error ya armado."""
-    try:
-        payload = CheckoutTokenService.verificar(checkout_token)
-    except CheckoutTokenInvalidoError:
-        return None, Response({'error': 'checkout_token_invalido'}, status=status.HTTP_401_UNAUTHORIZED)
-
-    if payload['proveedor_codigo'] != proveedor_codigo:
-        return None, Response({'error': 'proveedor_no_coincide_con_token'}, status=status.HTTP_403_FORBIDDEN)
-
-    try:
-        aplicacion = ValidacionAccesoService.validar_por_aplicacion(
-            aplicacion_id=payload['aplicacion_id'], proveedor_codigo=proveedor_codigo,
-        )
-    except AccesoNoAutorizadoError as exc:
-        return None, Response({'error': exc.motivo}, status=status.HTTP_403_FORBIDDEN)
-
-    return aplicacion, None
 
 
 class SolicitarOtpView(views.APIView):
@@ -99,7 +81,7 @@ class SolicitarOtpView(views.APIView):
         serializer.is_valid(raise_exception=True)
         datos = serializer.validated_data
 
-        _aplicacion, error_response = _resolver_checkout_token(datos['checkout_token'], datos['proveedor'])
+        _aplicacion, _payload, error_response = resolver_checkout_token(datos['checkout_token'], datos['proveedor'])
         if error_response is not None:
             return error_response
 
@@ -131,14 +113,22 @@ class EjecutarCobroView(views.APIView):
         serializer.is_valid(raise_exception=True)
         datos = serializer.validated_data
 
-        aplicacion, error_response = _resolver_checkout_token(datos['checkout_token'], datos['proveedor'])
+        aplicacion, token_payload, error_response = resolver_checkout_token(
+            datos['checkout_token'], datos['proveedor'],
+        )
         if error_response is not None:
             return error_response
 
+        # monto/moneda/concepto vienen del token verificado, nunca del body del
+        # submit — ver el docstring de EjecutarCobroRequestSerializer.
+        monto = Decimal(token_payload['monto'])
+        moneda = token_payload['moneda']
+        concepto = token_payload.get('concepto', 'Pago')
+
         payload_canonico = {
             'proveedor': datos['proveedor'],
-            'monto': str(datos['monto']),
-            'moneda': datos['moneda'],
+            'monto': str(monto),
+            'moneda': moneda,
             'cedula_pagador': datos['cedula_pagador'],
             'telefono_pagador': datos['telefono_pagador'],
             'banco_codigo': datos['banco_codigo'],
@@ -159,7 +149,7 @@ class EjecutarCobroView(views.APIView):
         pago = getattr(idem, 'intencion_pago', None)
         if pago is None:
             pago = FlujoCobroC2PService.iniciar(
-                aplicacion=aplicacion, monto=datos['monto'], moneda_codigo=datos['moneda'], idempotency_key=idem,
+                aplicacion=aplicacion, monto=monto, moneda_codigo=moneda, idempotency_key=idem,
             )
 
         adaptador = BDVPagoMovilC2PAdapter()
@@ -167,7 +157,7 @@ class EjecutarCobroView(views.APIView):
             _autorizacion, captura = FlujoCobroC2PService.ejecutar_cobro(
                 pago, adaptador=adaptador,
                 cedula_pagador=datos['cedula_pagador'], telefono_pagador=datos['telefono_pagador'],
-                banco_codigo=datos['banco_codigo'], concepto=datos['concepto'], otp=datos['otp'],
+                banco_codigo=datos['banco_codigo'], concepto=concepto, otp=datos['otp'],
                 telefono_comercio=settings.BDV_C2P_TELEFONO_COMERCIO,
             )
         except ProveedorPagoError as exc:

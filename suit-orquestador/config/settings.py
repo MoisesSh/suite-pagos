@@ -30,7 +30,11 @@ SECRET_KEY = 'django-insecure-5s!fewuq53zd@%*swfiyi7z9-iu##)yqrbkhvw$a(7zkx2ajnw
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# Lista separada por comas vía env (ej. "suit-orquestador,localhost") — sin esto,
+# cualquier acceso por el hostname interno de Docker devuelve 400 DisallowedHost
+# fuera de localhost/127.0.0.1. Default [] preserva el comportamiento local actual
+# (solo funciona sin ALLOWED_HOSTS configurado si DEBUG=True permite localhost).
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 
 # Application definition

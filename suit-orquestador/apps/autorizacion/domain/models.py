@@ -350,6 +350,8 @@ class EventoOutbox(AppendOnlyModel):
     schema_version = models.PositiveSmallIntegerField()
     estado = models.CharField(max_length=15, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
     sent_at = models.DateTimeField(null=True, blank=True)
+    intentos = models.PositiveSmallIntegerField(default=0)
+    ultimo_intento_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = 'Evento de outbox'

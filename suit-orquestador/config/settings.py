@@ -187,3 +187,29 @@ REST_FRAMEWORK = {
         'cobro_c2p': '30/hour',
     },
 }
+
+
+# --------------------------------------------------------------------------
+# Celery — relay del outbox (EventoOutbox -> RabbitMQ), no consumidor de nada.
+# research-outbox-vs-cdc.md: poller Celery beat, no CDC/Debezium.
+# --------------------------------------------------------------------------
+
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'amqp://guest:guest@localhost:5672//')
+# Sin result backend: la task del relay no necesita que nadie consulte su resultado
+# después — el estado real vive en EventoOutbox.estado (Postgres), mismo criterio
+# que ya aplicó Conciliación (research-stack-mensajeria.md sección 2).
+CELERY_RESULT_BACKEND = None
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TIMEZONE = TIME_ZONE
+# Mismo fix que encontró el equipo de Conciliación: el pidbox de Celery (control
+# remoto ping/inspect/broadcast) declara su cola de mailbox con
+# `transient_nonexcl_queues`, deprecado y rechazado por RabbitMQ 4.x por defecto
+# (error 541) — sin esto el worker entra en loop de reconexión/crash. No se usa
+# `celery inspect`/`celery control` en este proyecto, así que se desactiva en vez
+# de tocar la config del broker.
+CELERY_WORKER_ENABLE_REMOTE_CONTROL = False
+
+OUTBOX_RELAY_LOTE_SIZE = int(os.environ.get('OUTBOX_RELAY_LOTE_SIZE', '100'))
+OUTBOX_RELAY_MAX_INTENTOS = int(os.environ.get('OUTBOX_RELAY_MAX_INTENTOS', '5'))

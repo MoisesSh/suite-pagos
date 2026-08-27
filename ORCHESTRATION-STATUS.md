@@ -45,6 +45,13 @@ Ningún agente ejecuta trabajo directamente: arman un **bloque de próximo paso*
 (qué se hará, alcance, archivos afectados, qué falta confirmar) y esperan la
 orden de ejecución explícita del coordinador antes de tocar código.
 
+**Regla de comunicación (2026-08-27):** ningún agente espera que el usuario
+escriba directamente en su terminal, ni se bloquea en un diálogo interactivo
+esperando su respuesta — el usuario no mira las terminales de los agentes,
+solo el coordinador. Toda pregunta o decisión bloqueante se escribe como texto
+plano dirigido al coordinador, y el agente queda en espera normal (no en un
+menú de selección). El coordinador la lleva al usuario y trae la respuesta.
+
 ## Decisiones de arquitectura confirmadas
 
 - **Monorepo único** en la raíz, historial de git nuevo (no se preservó el de los

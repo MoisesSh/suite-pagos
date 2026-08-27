@@ -21,6 +21,11 @@ DEBUG = env.bool('DEBUG', default=True)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
+if DEBUG and not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOW_ALL_ORIGINS = True  # solo en desarrollo sin configurar
+CORS_ALLOW_CREDENTIALS = True  # el refresh token viaja en cookie HttpOnly
+
 
 # Application definition
 
@@ -35,6 +40,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'drf_spectacular',
+    'corsheaders',
     # Apps propias — shared primero porque no depende de nadie:
     'apps.shared',
     'apps.users',
@@ -43,6 +49,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -196,3 +203,22 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TIMEZONE = TIME_ZONE
+# El pidbox de Celery (control remoto: ping/inspect/broadcast) declara su cola
+# de mailbox con `transient_nonexcl_queues`, una feature que RabbitMQ 4.x
+# deprecó y rechaza por defecto (confirmado end-to-end contra el contenedor
+# rabbitmq:4.3-management-alpine de este monorepo — sin esto el worker entra
+# en loop de reconexión/crash). No se usa `celery inspect`/`celery control` en
+# este proyecto, así que se desactiva en vez de tocar la config del broker.
+CELERY_WORKER_ENABLE_REMOTE_CONTROL = False
+
+
+# --------------------------------------------------------------------------
+# Adaptador BDV — Conciliación (`POST /getMovement/v2`)
+# --------------------------------------------------------------------------
+
+# Sin default hardcodeado al host QA real (bdvconciliacionqa.banvenez.com:444,
+# investigaciones/research-brief-pagos.md §4.2) — para no arriesgar pegarle
+# por accidente sin credenciales explícitas cargadas vía .env.
+BDV_CONCILIACION_BASE_URL = env('BDV_CONCILIACION_BASE_URL', default=None)
+BDV_CONCILIACION_API_KEY = env('BDV_CONCILIACION_API_KEY', default=None)
+BDV_CONCILIACION_TIMEOUT = env.float('BDV_CONCILIACION_TIMEOUT', default=10.0)

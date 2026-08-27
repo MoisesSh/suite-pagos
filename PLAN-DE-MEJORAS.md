@@ -56,9 +56,9 @@ contra Postgres real incluyendo la migración del trigger. Todos pasan.
 
 ---
 
-### Bloque #3 — Adaptador real BDV Pago Móvil C2P 🔄 EN EJECUCIÓN
+### Bloque #3 — Adaptador real BDV Pago Móvil C2P ✅ COMPLETADO
 
-**Propuesto por:** `suit-backend` · **Estado:** autorizado, en curso
+**Propuesto por:** `suit-backend` · **Estado:** ejecutado y verificado (20/20 tests, Postgres real)
 
 **Alcance:** `infrastructure/adapters/bdv_c2p.py` — cliente HTTP del flujo de 3 pasos
 (OTP, cobro, anulación) contra la API real de BDV documentada en los PDFs de
@@ -77,13 +77,30 @@ Captura` usando el adaptador (sin exponer aún endpoint público de cobro ni ifr
 - Tests: mock de `requests.post` en el adaptador, mock del adaptador completo en
   los tests del servicio de flujo de cobro — nunca contra el host real de BDV
 
+**Verificación:** 20/20 tests pasando contra Postgres real, `manage.py check` limpio.
+Bug propio encontrado y corregido: la llamada HTTP y la transición a `fallido` no
+pueden vivir en el mismo `transaction.atomic()` que el camino de éxito (Postgres
+revierte la transición de fallo al re-lanzar la excepción) — quedaron separados.
+Migración `0004_seed_catalogos_bdv_c2p.py` puebla `MedioPago`, `ProveedorPago`,
+`Banco`, `TipoOperacionProveedor` y los 19 `CodigoRespuestaProveedor` reales.
+
+---
+
+### Bloque #4 — Endpoint público de cobro 🔄 EN EJECUCIÓN
+
+**Propuesto por:** `suit-backend` · **Estado:** autorizado, en curso
+
+**Alcance:** exponer el flujo `FlujoCobroC2PService` como endpoint público,
+respetando el requisito de seguridad ya establecido (validación de dominio/iframe,
+`research-seguridad-iframe.md`) antes de aceptar cualquier petición externa.
+
 ---
 
 ## `suit-conciliacion`
 
-### Bloque #1 — Apps base de Conciliación 🔄 EN EJECUCIÓN
+### Bloque #1 — Apps base de Conciliación ✅ COMPLETADO
 
-**Propuesto por:** `suit-conciliacion` · **Estado:** autorizado, en curso
+**Propuesto por:** `suit-conciliacion` · **Estado:** ejecutado y verificado end-to-end (25/25 tests + prueba real contra RabbitMQ)
 
 **Alcance:**
 1. **`apps/shared`** — `BaseModel` abstracto (UUID v7 + timestamps)
@@ -114,21 +131,86 @@ Captura` usando el adaptador (sin exponer aún endpoint público de cobro ni ifr
 como `TextChoices`, `ReporteERP.payload` como `JSONField`, índices en `referencia_corta` y
 `procesado_at`.
 
+**Verificación:** 25/25 tests pasando. Pipeline end-to-end probado contra
+infraestructura real (`suit-pagos-rabbitmq-1`): mensaje publicado al exchange
+`pago` (topic, routing key `pago.confirmado`) → bootstep `EventoPagoConsumerStep`
+→ tarea Celery `consumir_evento_pago` → `IngestaService` → `EventoPagoRecibido`
+persistido en Postgres. Bug real encontrado y corregido: Celery 5.6 es
+incompatible con RabbitMQ 4.x en el pidbox (`transient_nonexcl_queues`
+deprecado, error 541) — fix permanente con `CELERY_WORKER_ENABLE_REMOTE_CONTROL
+= False`. Puerto AMQP (5672) del contenedor RabbitMQ publicado en
+`deploy/docker-compose.yml` para poder probar contra el broker real desde el host.
+
+**Nota para `suit-orquestador`:** si en algún momento corre un worker Celery
+propio contra el mismo RabbitMQ, aplicar el mismo fix de `transient_nonexcl_queues`.
+
+---
+
+### Bloque #2 — Adaptador HTTP real a BDV `getMovement/v2` 🔄 EN EJECUCIÓN
+
+**Propuesto por:** `suit-conciliacion` · **Estado:** autorizado, en curso
+
+**Alcance:** cliente HTTP real hacia la API de conciliación de BDV (`X-API-Key`
+propia de Conciliación, manejo del debounce de 30s del banco), conectando la
+lógica de interpretación ya lista en `domain/bdv.py`/`MatchingService`.
+
 ---
 
 ## `suit-frontend`
 
-Sin bloques todavía — panel administrativo interno, scaffold verificado (build
-exitoso), en espera del contrato de API de `suit-orquestador`/`suit-conciliacion`
-para proponer el primer bloque de integración.
+### Bloque #1 — Login + Discrepancias + Eventos ✅ COMPLETADO Y VERIFICADO E2E
+
+**Propuesto por:** `suit-frontend` · **Estado:** verificado contra backend real (commits `a800935`, `f96364e`)
+
+**Alcance:** contra `CONTRATO-API-ACTUAL.md` (endpoints reales de `suit-conciliacion`):
+- Auth: NextAuth con relay manual de la cookie `refresh_token` HttpOnly
+  (`authorize()` reenvía el `Set-Cookie` del backend), access token en el JWT de
+  sesión (nunca expuesto al cliente), refresh automático en el callback `jwt`.
+- Módulo `modules/conciliacion/discrepancias/` (Onion completo: domain/application/
+  infrastructure/ui) — listado con filtro por `estado_resolucion`/`severidad`
+  (SWR + react-hook-form/zod) y acción de resolver (Dialog + server action).
+- Módulo `modules/conciliacion/eventos/` — listado de solo lectura con búsqueda.
+- `transacciones-ledger` (detail) queda para un bloque #2.
+- Dependencias nuevas: `next-auth`, `swr`, `react-hook-form`, `@hookform/resolvers`,
+  `zod`, `sonner`, `next-themes`, shadcn (button, card, field, input, select,
+  textarea, dialog, alert-dialog, badge, skeleton, separator).
+
+**Verificación end-to-end contra `suit-conciliacion` real** (no mockeada) —
+encontró y corrigió 4 desvíos reales del contrato documentado, que un mock
+nunca hubiera revelado:
+1. Paginación DRF no documentada: `discrepancias/` y `eventos/` devuelven
+   `{count, next, previous, results}`, no un array plano.
+2. `logout` requiere `Authorization: Bearer` + `refresh` en el body, la cookie
+   sola no alcanza.
+3. El `refresh` rota el token en cada llamada (viene también en el body) —
+   hay que persistir el nuevo valor, no parsear `Set-Cookie` a mano.
+4. Nombre de estado real es `abierta`, no `pendiente` (`Discrepancia.EstadoResolucion`).
+
+Flujo de resolver discrepancia probado con datos reales sembrados en la DB de
+`suit-conciliacion`: abierta → resuelta, con `resuelto_por`/`resuelto_at`
+mapeados correctamente. `CONTRATO-API-ACTUAL.md` actualizado con los 4 hallazgos.
 
 ---
 
 ## `suit-portal`
 
-Sin bloques todavía — Developer Portal, scaffold verificado, en espera del contrato
-de API de registro de aplicaciones/dominios (sección 2.0 de `db-plan-pagos.md`,
-ya implementado en `suit-orquestador`) para proponer el primer bloque de integración.
+### Bloque #1 — Estructura base + docs + formulario mockeado 🔄 EN EJECUCIÓN
+
+**Propuesto por:** `suit-portal` · **Estado:** autorizado, en curso
+
+**Alcance:** desbloqueado pese al gap #1 de `CONTRATO-API-ACTUAL.md` (CRUD de
+registro de apps/dominios no existe todavía en el backend):
+1. Layout base, nav, landing del portal.
+2. Visor de documentación — iframe a `/api/docs/` de `suit-conciliacion` (único
+   backend con Swagger hoy), con nota visible de que `suit-orquestador` aún no
+   expone docs — el gap se muestra al usuario, no se oculta.
+3. Formulario de registro de aplicación/dominio/proveedor (`modules/registro-aplicaciones/`,
+   Onion completo), **submit mockeado con `// TODO` explícito** apuntando al gap
+   #1 de `CONTRATO-API-ACTUAL.md` — se conecta al endpoint real cuando exista.
+4. Tests: unit (schema de validación), E2E (formulario + mensaje mockeado, sin
+   aserciones contra persistencia real), a11y.
+- Dependencias nuevas: `zod`, `react-hook-form`, `@hookform/resolvers`, `sonner`,
+  shadcn (button, input, label, select, card, field).
 
 ---
 

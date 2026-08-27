@@ -1,4 +1,9 @@
-from apps.autorizacion.domain.models import AplicacionProveedorPermitido, DominioPermitido, ProveedorPago
+from apps.autorizacion.domain.models import (
+    AplicacionProveedorPermitido,
+    AplicacionRegistrada,
+    DominioPermitido,
+    ProveedorPago,
+)
 
 
 class AccesoNoAutorizadoError(Exception):
@@ -25,7 +30,25 @@ class ValidacionAccesoService:
         if not dominio_permitido.activo:
             raise AccesoNoAutorizadoError('dominio_inactivo')
 
-        aplicacion = dominio_permitido.aplicacion
+        return ValidacionAccesoService._validar_aplicacion_proveedor(dominio_permitido.aplicacion, proveedor_codigo)
+
+    @staticmethod
+    def validar_por_aplicacion(aplicacion_id, proveedor_codigo):
+        """Re-validación por identidad de aplicación (no por dominio) — usada en el POST
+        de cobro dentro del flujo de checkout_token (research-seguridad-iframe.md sección 3:
+        el Origin/Referer del submit dentro del iframe no refleja el dominio de la app
+        consumidora, así que la identidad viaja en el token emitido por ValidarAccesoView,
+        no se re-deriva del header). Repite las mismas comprobaciones de app/proveedor que
+        `validar`, sin volver a resolver por dominio."""
+        try:
+            aplicacion = AplicacionRegistrada.objects.get(id=aplicacion_id)
+        except AplicacionRegistrada.DoesNotExist:
+            raise AccesoNoAutorizadoError('aplicacion_no_encontrada')
+
+        return ValidacionAccesoService._validar_aplicacion_proveedor(aplicacion, proveedor_codigo)
+
+    @staticmethod
+    def _validar_aplicacion_proveedor(aplicacion, proveedor_codigo):
         if not aplicacion.activa:
             raise AccesoNoAutorizadoError('aplicacion_inactiva')
 

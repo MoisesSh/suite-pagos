@@ -83,7 +83,10 @@ class ConsultaConciliacionProveedor(BaseModel):
     cedula_pagador = models.CharField(max_length=20, blank=True)
     cedula_confiable = models.BooleanField(default=False)
     importe_esperado = models.DecimalField(max_digits=19, decimal_places=2)
-    fecha_pago = models.DateTimeField()
+    # DateField (no DateTimeField): el contrato de `pago.confirmado` y el
+    # request/response de getMovement/v2 mandan `fecha_pago` como AAAA-MM-DD,
+    # sin hora (investigaciones/contrato-evento-pago-confirmado.md).
+    fecha_pago = models.DateField()
     codigo_respuesta_raw = models.CharField(max_length=20)
     mensaje_respuesta_raw = models.TextField(blank=True)
     resultado_interpretado = models.CharField(max_length=30, choices=ResultadoInterpretado.choices)

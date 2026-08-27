@@ -51,6 +51,25 @@ FOR EACH ROW EXECUTE FUNCTION conciliacion_validar_balance_ledger();
 DROP_TRIGGER_SQL = 'DROP TRIGGER IF EXISTS trg_validar_balance_ledger ON conciliacion_linea_ledger;'
 
 
+def crear_trigger_balance(apps, schema_editor):
+    # No-op fuera de Postgres: PL/pgSQL no existe en sqlite. El entorno local
+    # de este proyecto corre `manage.py test` contra sqlite (sin CREATEDB en
+    # el Postgres real, ver testing-backend-django), así que el invariante de
+    # balance-cero solo se verifica a nivel de motor en Postgres real —
+    # producción y cualquier entorno con DATABASE_URL apuntando a Postgres.
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    schema_editor.execute(CREATE_FUNCTION_SQL)
+    schema_editor.execute(CREATE_TRIGGER_SQL)
+
+
+def eliminar_trigger_balance(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+    schema_editor.execute(DROP_TRIGGER_SQL)
+    schema_editor.execute(DROP_FUNCTION_SQL)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -58,12 +77,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql=CREATE_FUNCTION_SQL,
-            reverse_sql=DROP_FUNCTION_SQL,
-        ),
-        migrations.RunSQL(
-            sql=CREATE_TRIGGER_SQL,
-            reverse_sql=DROP_TRIGGER_SQL,
-        ),
+        migrations.RunPython(crear_trigger_balance, eliminar_trigger_balance),
     ]

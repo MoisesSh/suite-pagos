@@ -52,12 +52,20 @@ respectivamente (convención estándar de Next.js).
 
 ## Uso
 
+**Importante:** siempre usar `-p suit-pagos` (o el flag `--project-name`) al
+correr `docker compose` en esta carpeta. Sin un nombre de proyecto explícito,
+Compose usa el nombre del directorio padre (`deploy`) como project name —
+si el host tiene otro proyecto con una carpeta `deploy/` (ej. otro repo
+llamado igual), Compose puede confundir/detener los contenedores del otro
+proyecto al no encontrarlos en este `docker-compose.yml`. Ya ocurrió una vez
+en desarrollo — usar siempre `-p suit-pagos` evita el problema.
+
 ```bash
 # Desarrollo (hot reload, monta el código como volumen)
-docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.override.yml up -d
+docker compose -p suit-pagos -f deploy/docker-compose.yml -f deploy/docker-compose.override.yml up -d
 
 # Producción (imágenes optimizadas, sin volúmenes de código)
-docker compose -f deploy/docker-compose.yml up -d
+docker compose -p suit-pagos -f deploy/docker-compose.yml up -d
 
 # Build de un servicio específico (ejemplo: solo el Orquestador)
 docker build -f deploy/Dockerfile.backend --build-arg SERVICE_DIR=suit-orquestador -t suit-orquestador:latest .
@@ -66,10 +74,10 @@ docker build -f deploy/Dockerfile.backend --build-arg SERVICE_DIR=suit-orquestad
 docker build -f deploy/Dockerfile.backend --build-arg SERVICE_DIR=suit-conciliacion --target tester .
 
 # Logs
-docker compose -f deploy/docker-compose.yml logs -f suit-orquestador suit-conciliacion
+docker compose -p suit-pagos -f deploy/docker-compose.yml logs -f suit-orquestador suit-conciliacion
 
 # Limpiar todo (incluye volúmenes de datos — perder las bases locales)
-docker compose -f deploy/docker-compose.yml down -v
+docker compose -p suit-pagos -f deploy/docker-compose.yml down -v
 ```
 
 ## Pre-flight checks

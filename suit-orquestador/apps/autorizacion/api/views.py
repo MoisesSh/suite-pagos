@@ -1,16 +1,44 @@
+from django.conf import settings
 from rest_framework import status, views
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 
-from apps.autorizacion.api.serializers import ValidarAccesoRequestSerializer
-from apps.autorizacion.application.services import AccesoNoAutorizadoError, ValidacionAccesoService
+from apps.autorizacion.api.serializers import (
+    EjecutarCobroRequestSerializer,
+    SolicitarOtpRequestSerializer,
+    ValidarAccesoRequestSerializer,
+)
+from apps.autorizacion.application.services import (
+    AccesoNoAutorizadoError,
+    CheckoutTokenInvalidoError,
+    CheckoutTokenService,
+    FlujoCobroC2PService,
+    IdempotencyConflictError,
+    IdempotencyService,
+    ValidacionAccesoService,
+)
+from apps.autorizacion.domain.errores_proveedor import ProveedorPagoError, ProveedorPagoIndisponibleError
+from apps.autorizacion.domain.models import CodigoRespuestaProveedor, IdempotencyKey, ProveedorPago
+from apps.autorizacion.infrastructure.adapters.bdv_c2p import BDVPagoMovilC2PAdapter
+
+# Mapeo de categoría de CodigoRespuestaProveedor -> status HTTP de la respuesta pública.
+# duplicado_idempotente -> 409 (el banco ya vio esta operación, mismo criterio que nuestra
+# propia idempotencia). error_negocio -> 402 (pago rechazado por un motivo del pagador/cuenta,
+# no un fallo del sistema). error_tecnico -> 503 (falla del lado del proveedor/conector).
+_STATUS_POR_CATEGORIA = {
+    CodigoRespuestaProveedor.Categoria.DUPLICADO_IDEMPOTENTE: status.HTTP_409_CONFLICT,
+    CodigoRespuestaProveedor.Categoria.ERROR_NEGOCIO: status.HTTP_402_PAYMENT_REQUIRED,
+    CodigoRespuestaProveedor.Categoria.ERROR_TECNICO: status.HTTP_503_SERVICE_UNAVAILABLE,
+}
 
 
 class ValidarAccesoView(views.APIView):
     """Control de seguridad bloqueante (db-plan-pagos.md 2.0): valida
     dominio -> aplicación -> proveedor autorizado. No crea ninguna
-    IntencionPago — eso queda para un endpoint posterior que consuma
-    este resultado."""
+    IntencionPago. Si autoriza, emite un checkout_token (CheckoutTokenService)
+    que los endpoints de cobro exigen en vez de re-derivar el dominio del
+    Origin/Referer en cada submit (research-seguridad-iframe.md sección 3)."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -25,4 +53,139 @@ class ValidarAccesoView(views.APIView):
         except AccesoNoAutorizadoError as exc:
             return Response({'autorizado': False, 'motivo': exc.motivo}, status=status.HTTP_403_FORBIDDEN)
 
-        return Response({'autorizado': True, 'aplicacion': aplicacion.nombre}, status=status.HTTP_200_OK)
+        checkout_token = CheckoutTokenService.generar(
+            aplicacion_id=aplicacion.id, proveedor_codigo=serializer.validated_data['proveedor'],
+        )
+        return Response(
+            {'autorizado': True, 'aplicacion': aplicacion.nombre, 'checkout_token': checkout_token},
+            status=status.HTTP_200_OK,
+        )
+
+
+def _resolver_checkout_token(checkout_token, proveedor_codigo):
+    """Común a ambos endpoints de cobro: valida la firma/vigencia del token, que el
+    proveedor solicitado coincida con el autorizado en el token, y re-valida
+    app/proveedor por si la autorización cambió entre la emisión del token y este
+    submit (el token puede vivir hasta CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS). Devuelve
+    (aplicacion, None) o (None, Response) con el error ya armado."""
+    try:
+        payload = CheckoutTokenService.verificar(checkout_token)
+    except CheckoutTokenInvalidoError:
+        return None, Response({'error': 'checkout_token_invalido'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if payload['proveedor_codigo'] != proveedor_codigo:
+        return None, Response({'error': 'proveedor_no_coincide_con_token'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        aplicacion = ValidacionAccesoService.validar_por_aplicacion(
+            aplicacion_id=payload['aplicacion_id'], proveedor_codigo=proveedor_codigo,
+        )
+    except AccesoNoAutorizadoError as exc:
+        return None, Response({'error': exc.motivo}, status=status.HTTP_403_FORBIDDEN)
+
+    return aplicacion, None
+
+
+class SolicitarOtpView(views.APIView):
+    """Dispara el envío de la clave OTP al pagador (paso 1 del flujo C2P). No crea
+    ninguna IntencionPago ni usa idempotencia — repetirlo solo reenvía el OTP,
+    mitigado por throttling, no por deduplicación de cobro."""
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'cobro_c2p_otp'
+
+    def post(self, request):
+        serializer = SolicitarOtpRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        datos = serializer.validated_data
+
+        _aplicacion, error_response = _resolver_checkout_token(datos['checkout_token'], datos['proveedor'])
+        if error_response is not None:
+            return error_response
+
+        adaptador = BDVPagoMovilC2PAdapter()
+        try:
+            FlujoCobroC2PService.solicitar_otp(adaptador=adaptador, cedula_pagador=datos['cedula_pagador'])
+        except ProveedorPagoError as exc:
+            return Response(
+                {'error': 'proveedor_rechazo_otp', 'codigo_proveedor': exc.codigo}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ProveedorPagoIndisponibleError:
+            return Response({'error': 'proveedor_no_disponible'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        return Response({'resultado': 'otp_enviado'}, status=status.HTTP_200_OK)
+
+
+class EjecutarCobroView(views.APIView):
+    """Endpoint público de cobro (paso 2+3 del flujo C2P, unificados: BDV cobra en una
+    sola llamada). Crea IntencionPago -> Autorizacion -> Captura vía FlujoCobroC2PService.
+    Deduplicado por idempotency_key (db-plan-pagos.md 2.3): un reintento con la misma key
+    y el mismo payload canónico devuelve la respuesta ya resuelta en vez de volver a
+    cobrar; con un payload distinto, se rechaza."""
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'cobro_c2p'
+
+    def post(self, request):
+        serializer = EjecutarCobroRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        datos = serializer.validated_data
+
+        aplicacion, error_response = _resolver_checkout_token(datos['checkout_token'], datos['proveedor'])
+        if error_response is not None:
+            return error_response
+
+        payload_canonico = {
+            'proveedor': datos['proveedor'],
+            'monto': str(datos['monto']),
+            'moneda': datos['moneda'],
+            'cedula_pagador': datos['cedula_pagador'],
+            'telefono_pagador': datos['telefono_pagador'],
+            'banco_codigo': datos['banco_codigo'],
+        }
+        try:
+            idem, creada = IdempotencyService.obtener_o_crear(datos['idempotency_key'], payload_canonico)
+        except IdempotencyConflictError:
+            return Response({'error': 'idempotency_key_conflicto'}, status=status.HTTP_409_CONFLICT)
+
+        if not creada and idem.estado in (IdempotencyKey.Estado.COMPLETADO, IdempotencyKey.Estado.RECHAZADO):
+            snapshot = idem.response_snapshot or {}
+            return Response(snapshot.get('body', {}), status=snapshot.get('status_code', status.HTTP_200_OK))
+
+        # idem.estado == PENDIENTE aquí: primera vez (creada=True), o un reintento legítimo
+        # de un intento anterior que no llegó a completarse (timeout/caída de red). En ese
+        # segundo caso reusamos el IntencionPago ya creado en vez de crear uno nuevo — el
+        # OneToOneField IdempotencyKey.intencion_pago no admite una segunda fila.
+        pago = getattr(idem, 'intencion_pago', None)
+        if pago is None:
+            pago = FlujoCobroC2PService.iniciar(
+                aplicacion=aplicacion, monto=datos['monto'], moneda_codigo=datos['moneda'], idempotency_key=idem,
+            )
+
+        adaptador = BDVPagoMovilC2PAdapter()
+        try:
+            _autorizacion, captura = FlujoCobroC2PService.ejecutar_cobro(
+                pago, adaptador=adaptador,
+                cedula_pagador=datos['cedula_pagador'], telefono_pagador=datos['telefono_pagador'],
+                banco_codigo=datos['banco_codigo'], concepto=datos['concepto'], otp=datos['otp'],
+                telefono_comercio=settings.BDV_C2P_TELEFONO_COMERCIO,
+            )
+        except ProveedorPagoError as exc:
+            proveedor = ProveedorPago.objects.get(codigo=datos['proveedor'])
+            categoria = CodigoRespuestaProveedor.objects.filter(proveedor=proveedor, codigo=exc.codigo).values_list(
+                'categoria', flat=True,
+            ).first()
+            status_code = _STATUS_POR_CATEGORIA.get(categoria, status.HTTP_402_PAYMENT_REQUIRED)
+            body = {'error': 'proveedor_rechazo_cobro', 'codigo_proveedor': exc.codigo, 'pago_id': str(pago.id)}
+            IdempotencyService.finalizar(idem, estado=IdempotencyKey.Estado.RECHAZADO, status_code=status_code, body=body)
+            return Response(body, status=status_code)
+        except ProveedorPagoIndisponibleError:
+            # Falla de transporte, no de negocio: no se marca completado/rechazado — la
+            # idempotency key queda pendiente para que un reintento legítimo la reuse.
+            return Response(
+                {'error': 'proveedor_no_disponible', 'pago_id': str(pago.id)}, status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        body = {'pago_id': str(pago.id), 'estado': pago.estado_actual, 'referencia_corta': captura.referencia_corta}
+        IdempotencyService.finalizar(idem, estado=IdempotencyKey.Estado.COMPLETADO, status_code=status.HTTP_200_OK, body=body)
+        return Response(body, status=status.HTTP_200_OK)

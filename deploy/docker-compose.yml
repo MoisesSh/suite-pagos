@@ -51,6 +51,7 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     ports:
       - "15672:15672" # management UI, solo dev/staging
+      - "5672:5672" # AMQP, solo dev/staging — para probar el consumer Celery desde el host
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s

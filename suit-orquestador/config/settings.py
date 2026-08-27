@@ -151,3 +151,39 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# Proveedor de pago: BDV Pago Móvil C2P
+# https://bdvconciliacionqa.banvenez.com:444 (ambiente Calidad/QA del banco).
+# Autenticación por X-API-Key estática, sin token de sesión — ver
+# apps/autorizacion/infrastructure/adapters/bdv_c2p.py.
+
+BDV_C2P_BASE_URL = os.environ.get('BDV_C2P_BASE_URL', 'https://bdvconciliacionqa.banvenez.com:444')
+BDV_C2P_API_KEY = os.environ.get('BDV_C2P_API_KEY', '')
+BDV_C2P_TIMEOUT_SEGUNDOS = int(os.environ.get('BDV_C2P_TIMEOUT_SEGUNDOS', '15'))
+
+# Teléfono afiliado del comercio (Conatel) ante BDV — `commerceNumberInstrument` del
+# contrato C2P. Es config del comercio, no algo que la app consumidora deba enviar.
+BDV_C2P_TELEFONO_COMERCIO = os.environ.get('BDV_C2P_TELEFONO_COMERCIO', '')
+
+
+# Token de sesión de checkout (apps/autorizacion/application/services/checkout_token.py):
+# emitido por ValidarAccesoView, exigido por los endpoints de cobro en vez de re-derivar
+# el dominio de origen del Origin/Referer en cada submit (research-seguridad-iframe.md
+# sección 3). Vigencia corta: tiempo esperado para que el usuario reciba el OTP por SMS
+# y complete el formulario, no una sesión de checkout larga.
+CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS = int(os.environ.get('CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS', '900'))
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_THROTTLE_RATES': {
+        # Repetirlo solo reenvía el OTP al pagador — el límite existe para no permitir
+        # spam de SMS a un número ajeno, no por riesgo de doble cobro.
+        'cobro_c2p_otp': '20/hour',
+        # Cobro real: más restrictivo que el OTP. Los reintentos legítimos (timeout de
+        # red) reusan la misma idempotency_key y no cuentan como una operación nueva
+        # del lado del banco, pero sí consumen throttle — el límite deja margen para
+        # unos pocos reintentos sin bloquear al usuario a mitad de un pago real.
+        'cobro_c2p': '30/hour',
+    },
+}

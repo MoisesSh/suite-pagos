@@ -1,5 +1,6 @@
 import { apiClient } from "@/shared/infrastructure/http/fetcher-api";
 import { queryParams } from "@/shared/infrastructure/http/query-params";
+import type { Paginated } from "@/shared/types/paginated";
 import type { DiscrepanciaEntity } from "../../domain/entities/discrepancia-entity";
 import type {
   DiscrepanciasFiltro,
@@ -12,8 +13,10 @@ export async function getDiscrepancias(filtro: DiscrepanciasFiltro): Promise<Dis
     estado_resolucion: filtro.estadoResolucion,
     severidad: filtro.severidad,
   });
-  const data = await apiClient.get<DiscrepanciaRaw[]>(`/api/conciliacion/discrepancias/${qs}`);
-  return data.map(mapperDiscrepancia);
+  const data = await apiClient.get<Paginated<DiscrepanciaRaw>>(
+    `/api/conciliacion/discrepancias/${qs}`,
+  );
+  return data.results.map(mapperDiscrepancia);
 }
 
 export async function patchDiscrepancia(

@@ -1,6 +1,6 @@
 import type { UsuarioResumen } from "@/shared/types/usuario";
 
-export type EstadoResolucion = "pendiente" | "resuelta" | "descartada" | "en_revision";
+export type EstadoResolucion = "abierta" | "resuelta" | "descartada" | "en_revision";
 
 export interface DiscrepanciaEntity {
   readonly id: string;

@@ -18,7 +18,7 @@ import ResolverDiscrepanciaDialog from "./resolver-discrepancia-dialog";
 import type { EstadoResolucion } from "../domain/entities/discrepancia-entity";
 
 const ESTADO_FILTRO_OPTIONS: { value: EstadoResolucion; label: string }[] = [
-  { value: "pendiente", label: "Pendiente" },
+  { value: "abierta", label: "Abierta" },
   { value: "en_revision", label: "En revision" },
   { value: "resuelta", label: "Resuelta" },
   { value: "descartada", label: "Descartada" },
@@ -27,7 +27,7 @@ const ESTADO_FILTRO_OPTIONS: { value: EstadoResolucion; label: string }[] = [
 const SEVERIDAD_FILTRO_OPTIONS = ["baja", "media", "alta", "critica"];
 
 const ESTADO_BADGE_VARIANT: Record<EstadoResolucion, "default" | "secondary" | "destructive" | "outline"> = {
-  pendiente: "outline",
+  abierta: "outline",
   en_revision: "secondary",
   resuelta: "default",
   descartada: "destructive",

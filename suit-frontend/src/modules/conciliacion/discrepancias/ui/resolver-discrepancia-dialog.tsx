@@ -44,7 +44,7 @@ export default function ResolverDiscrepanciaDialog({
     resolver: zodResolver(resolverDiscrepanciaFormSchema),
     defaultValues: {
       estadoResolucion:
-        discrepancia.estadoResolucion === "pendiente" ? "en_revision" : discrepancia.estadoResolucion,
+        discrepancia.estadoResolucion === "abierta" ? "en_revision" : discrepancia.estadoResolucion,
       notas: discrepancia.notas,
     },
   });

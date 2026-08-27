@@ -69,20 +69,31 @@ logueado en un panel). No expone Swagger todavía (drf-spectacular no está en
 | POST | `/api/autorizacion/cobro/otp/` | *(en desarrollo — Bloque #4)* | — |
 | POST | `/api/autorizacion/cobro/` | *(en desarrollo — Bloque #4, requiere token de sesión de checkout emitido por `validar-acceso`)* | — |
 
-**No existe todavía** ningún endpoint para: listar/crear `AplicacionRegistrada`,
-`DominioPermitido` ni `AplicacionProveedorPermitido` (el registro de apps/dominios
-del Developer Portal). Hoy solo se gestionan por Django admin. Es el bloqueador
-real para que `suit-portal` tenga algo funcional más allá de UI estática — ver
-nota abajo.
+### Admin — registro de apps/dominios (`api/admin_views.py`, `TokenAuthentication` + `IsAdminUser`)
+
+Resuelve el gap #1 (ya no bloquea a `suit-portal`). El token se genera desde
+Django admin (`/admin/authtoken/tokenproxy/`) por un superuser, y `suit-portal`
+lo guarda server-side en su propio `.env` (nunca expuesto al navegador) —
+`Authorization: Token <...>`.
+
+| Método | Ruta | Body | Respuesta |
+|---|---|---|---|
+| POST | `/api/autorizacion/admin/aplicaciones/` | `{"nombre", "dominio", "proveedor"}` | 201 `{"id", "nombre", "dominio", "proveedor"}` — mismo shape que `CreateAplicacionParams`/`AplicacionRegistradaEntity` de `suit-portal` |
+| GET | `/api/autorizacion/admin/aplicaciones/` | — | lista con `dominios`/`proveedores_autorizados` anidados |
+| PATCH | `/api/autorizacion/admin/aplicaciones/<uuid:id>/` | `{"activa": true\|false}` | app activada/desactivada (kill switch, mismo campo que usa `ValidacionAccesoService`) |
+
+**Fuera de alcance de este bloque** (a pedir explícitamente si se necesita):
+editar/desactivar un `DominioPermitido`/`AplicacionProveedorPermitido`
+individual, o agregar un segundo dominio/proveedor a una app ya creada.
 
 ---
 
 ## Gaps conocidos (para no bloquear a los frontends, pero a tener en cuenta)
 
-1. **CRUD de registro de apps/dominios** (`suit-portal` lo necesita para
-   funcionar de verdad) — no implementado. Candidato a próximo bloque de
-   `suit-backend` una vez cierre el flujo de cobro.
+1. ~~CRUD de registro de apps/dominios~~ — **RESUELTO** (ver sección Admin arriba).
+   `suit-portal` puede reemplazar su mock por el endpoint real.
 2. **Auth JWT de `suit-orquestador`** — si el panel (`suit-frontend`) necesita
    ver datos del Orquestador (no solo Conciliación), ese backend no tiene login
-   propio todavía. A definir si el panel solo lee de Conciliación por ahora.
+   propio de usuario final todavía (solo `TokenAuthentication` para admin/M2M).
+   A definir si el panel solo lee de Conciliación por ahora.
 3. **Swagger de `suit-orquestador`** — no configurado (sí en Conciliación).

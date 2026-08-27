@@ -187,13 +187,45 @@ propio contra el mismo RabbitMQ, aplicar el mismo fix de `transient_nonexcl_queu
 
 ---
 
-### Bloque #2 — Adaptador HTTP real a BDV `getMovement/v2` 🔄 EN EJECUCIÓN
+### Bloque #2 — Adaptador HTTP real a BDV `getMovement/v2` ✅ COMPLETADO
 
-**Propuesto por:** `suit-conciliacion` · **Estado:** autorizado, en curso
+**Propuesto por:** `suit-conciliacion` · **Estado:** ejecutado (alcance reducido, luego conectado tras el contrato de evento)
 
 **Alcance:** cliente HTTP real hacia la API de conciliación de BDV (`X-API-Key`
 propia de Conciliación, manejo del debounce de 30s del banco), conectando la
-lógica de interpretación ya lista en `domain/bdv.py`/`MatchingService`.
+lógica de interpretación ya lista en `domain/bdv.py`/`MatchingService`. Se
+ejecutó primero en alcance reducido (cliente HTTP puro, desconectado del
+consumer) mientras `suit-orquestador` definía el contrato de `pago.confirmado`;
+conectado en un paso siguiente sin fricción (cambio de una línea en `tasks.py`).
+
+**Auto-auditoría:** tras el smoke test de `suit-frontend` (que encontró 4
+desvíos reales del contrato), `suit-conciliacion` auditó su propia API contra
+esos 4 puntos — confirmó que su implementación ya era correcta en los cuatro
+casos; los "desvíos" eran imprecisiones de `CONTRATO-API-ACTUAL.md`, corregidas.
+
+---
+
+## `suit-orquestador` (bloques adicionales tras el resumen)
+
+### Bloque #7 — CRUD de registro de aplicaciones/dominios ✅ COMPLETADO
+
+**Propuesto por:** `suit-backend` · **Estado:** ejecutado y verificado (67/67 tests, Postgres real)
+
+**Alcance:** `AplicacionRegistrada`/`DominioPermitido`/`AplicacionProveedorPermitido`
+gestionables vía API, no solo Django admin — desbloquea a `suit-portal`.
+`TokenAuthentication` (reutiliza `django.contrib.auth`/`rest_framework.authtoken`,
+sin replicar JWT completo para un volumen bajísimo e interno) + `IsAdminUser`.
+`app_origen_id` opcional (UUID propio si no llega, hasta que `suit-portal` tenga
+su propia entidad `AppConsumidora`).
+
+| Método | Ruta |
+|---|---|
+| POST | `/api/autorizacion/admin/aplicaciones/` |
+| GET | `/api/autorizacion/admin/aplicaciones/` |
+| PATCH | `/api/autorizacion/admin/aplicaciones/<uuid:id>/` |
+
+Permisos verificados explícitamente: sin token → 401, usuario no-staff → 403,
+staff → 200/201.
 
 ---
 

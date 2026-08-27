@@ -59,15 +59,25 @@ def crear_trigger_balance(apps, schema_editor):
     # producción y cualquier entorno con DATABASE_URL apuntando a Postgres.
     if schema_editor.connection.vendor != 'postgresql':
         return
-    schema_editor.execute(CREATE_FUNCTION_SQL)
-    schema_editor.execute(CREATE_TRIGGER_SQL)
+    # params=None (no el default `()`) es obligatorio aquí: con `()`,
+    # DatabaseSchemaEditor.execute() de Postgres pasa el SQL por
+    # connection.ops.compose_sql()/mogrify de psycopg para "mezclar" params
+    # del lado del cliente — y esta versión de psycopg NO colapsa `%%` a `%`
+    # (`collapse_double_percent=False`), así que cualquier `%` literal de
+    # PL/pgSQL (como en el RAISE EXCEPTION de abajo) rompe con
+    # "incomplete placeholder"/"only %s, %b, %t son válidos". Con
+    # params=None, Django salta compose_sql por completo y manda el SQL tal
+    # cual — confirmado corriendo esta migración contra Postgres real
+    # (sqlite nunca la ejerce, por eso pasó desapercibido hasta Docker).
+    schema_editor.execute(CREATE_FUNCTION_SQL, params=None)
+    schema_editor.execute(CREATE_TRIGGER_SQL, params=None)
 
 
 def eliminar_trigger_balance(apps, schema_editor):
     if schema_editor.connection.vendor != 'postgresql':
         return
-    schema_editor.execute(DROP_TRIGGER_SQL)
-    schema_editor.execute(DROP_FUNCTION_SQL)
+    schema_editor.execute(DROP_TRIGGER_SQL, params=None)
+    schema_editor.execute(DROP_FUNCTION_SQL, params=None)
 
 
 class Migration(migrations.Migration):

@@ -43,6 +43,13 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    # Registra el modelo Token; django.contrib.admin autodiscovery importa
+    # rest_framework/authtoken/admin.py automáticamente y lo expone en
+    # /admin/authtoken/tokenproxy/ — un superuser genera su token ahí, sin UI de
+    # login nueva. Usado solo por los endpoints /api/autorizacion/admin/ (bajo
+    # volumen, uso interno de staff, no la app consumidora final) — no
+    # reemplaza ni se mezcla con AllowAny de los endpoints públicos de cobro.
+    'rest_framework.authtoken',
     'apps.autorizacion',
 ]
 

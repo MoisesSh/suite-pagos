@@ -6,7 +6,11 @@ from kombu import Consumer, Exchange, Queue
 logger = logging.getLogger(__name__)
 
 pago_exchange = Exchange('pago', type='topic')
-pago_queue = Queue('conciliacion.eventos_pago', exchange=pago_exchange, routing_key='pago.#', durable=True)
+# Nombre distinto de `task_default_queue` (config/celery.py) a propósito:
+# esta cola solo recibe eventos crudos de dominio (protocolo del outbox de
+# Orquestador), nunca mensajes-tarea de Celery. Compartir nombre con la cola
+# de tareas causó un loop de reintentos real (ver comentario en celery.py).
+pago_queue = Queue('conciliacion.eventos_pago.inbox', exchange=pago_exchange, routing_key='pago.#', durable=True)
 
 
 class EventoPagoConsumerStep(bootsteps.ConsumerStep):

@@ -265,6 +265,36 @@ mapeados correctamente. `CONTRATO-API-ACTUAL.md` actualizado con los 4 hallazgos
 
 ---
 
+## Bloque #8 — Prueba de integración real end-to-end ✅ COMPLETADO — HITO CLAVE
+
+**Coordinado entre** `suit-backend` y `suit-conciliacion` · **Estado:** pipeline completo verificado con infraestructura y BDV reales
+
+**Flujo probado de punta a punta**, sin ningún mock: `validar-acceso` (emite
+checkout token) → `cobro/otp` (BDV QA real) → `cobro` (BDV QA real, `IntencionPago`
+capturado, `Autorizacion`+`Captura` creadas) → `EventoOutbox` escrito → relay
+ejecutado manualmente → publicado a **RabbitMQ real** (`suit-pagos-rabbitmq-1`)
+→ worker Celery de Conciliación lo consume → `IngestaService` → `EventoPagoRecibido`
+persistido → `BdvConciliacionClient` consulta BDV QA real → `domain/bdv.py`
+interpreta la respuesta → `MatchingService` genera `Discrepancia` (el banco QA
+respondió "no existe" — esperable, son dos sandboxes aislados sin estado
+compartido, no una falla del sistema; el diseño "nunca falla en silencio" hizo
+exactamente lo esperado).
+
+**Dos bugs reales de producción encontrados y corregidos en el camino:**
+1. BDV QA dummy exige el formato literal del ejemplo del PDF (`"1000.6"`, no
+   `"1000.60"`) — documentado como memoria de proyecto, no se tocó el adaptador
+   real (que sí genera el formato correcto de 2 decimales para producción).
+2. **Colisión de nombres de cola** en `suit-conciliacion`: el bootstep de
+   eventos crudos usaba por accidente el mismo nombre que la cola default de
+   tareas de Celery — dos consumidores compitiendo generó un loop de reintentos
+   amplificándose hasta `EncodeError` por recursión máxima. Cortado a tiempo
+   sin daño a datos, colas separadas (`conciliacion.eventos_pago.inbox` vs. la
+   cola nativa de Celery), verificado limpio con evento sintético.
+
+`event_id` de referencia para auditoría: `06a90a96-7720-735a-8000-513ba65c1bf3`.
+
+---
+
 ## `suit-portal`
 
 ### Bloque #1 — Estructura base + docs + formulario mockeado 🔄 EN EJECUCIÓN

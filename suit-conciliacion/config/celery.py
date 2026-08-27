@@ -1,22 +1,22 @@
 import os
 
 from celery import Celery
-from kombu import Exchange, Queue
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
 app = Celery('suit_conciliacion')
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
-# Cola dedicada, atada al exchange topic `pago` del Orquestador — consumo
-# directo de RabbitMQ (patrón estándar Celery+RabbitMQ), sin poller propio.
-# El poller de EventoOutbox (research-outbox-vs-cdc.md) es exclusivo del
-# lado Orquestador para su propia tabla, no aplica a Conciliación.
-pago_exchange = Exchange('pago', type='topic')
-app.conf.task_queues = (
-    Queue('conciliacion.eventos_pago', exchange=pago_exchange, routing_key='pago.#', durable=True),
-)
-app.conf.task_default_queue = 'conciliacion.eventos_pago'
+# La cola de eventos crudos de dominio (`pago.*`, ver infrastructure/bootsteps.py)
+# NO debe ser la misma que `task_default_queue`: si comparten nombre, el
+# consumer nativo de Celery (protocolo de tareas) y el bootstep custom
+# (protocolo de eventos crudos, ver infrastructure/bootsteps.py) compiten por
+# la misma cola en RabbitMQ, y cada uno recibe mensajes del otro sin poder
+# interpretarlos — confirmado en un smoke test real: reintentos de Celery
+# aterrizando en el bootstep como si fueran eventos crudos, generando un loop
+# de reintentos amplificante. `task_default_queue` queda con el nombre por
+# defecto de Celery (cola de tareas interna, sin binding a ningún exchange de
+# dominio) — el bootstep declara su propia cola de forma explícita.
 
 app.autodiscover_tasks(['apps.conciliacion'], related_name='infrastructure.tasks')
 

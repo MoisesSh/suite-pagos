@@ -18,15 +18,10 @@ export class AplicacionesPage {
   private async fillAndVerify(locator: ReturnType<Page["getByLabel"]>, value: string) {
     await expect(async () => {
       await locator.click();
+      await locator.fill("");
       await locator.pressSequentially(value, { delay: 10 });
       await expect(locator).toHaveValue(value);
     }).toPass({ timeout: 10_000 });
-  }
-
-  async verAvisoDeMock() {
-    await expect(this.page.getByRole("status")).toContainText(
-      "no está conectado a ningún backend real",
-    );
   }
 
   async enviar(data: { nombre: string; dominio: string; proveedor: string }) {
@@ -37,7 +32,11 @@ export class AplicacionesPage {
     await this.page.getByRole("button", { name: "Enviar solicitud" }).click();
   }
 
-  async verMensajeSimulado() {
-    await expect(this.page.getByText(/registrada \(simulada\)/i)).toBeVisible();
+  async verMensajeExito() {
+    await expect(this.page.getByText(/registrada en suit-orquestador/i)).toBeVisible();
+  }
+
+  async verErrorDominioDuplicado() {
+    await expect(this.page.getByText(/ya existe una aplicación con este dominio/i)).toBeVisible();
   }
 }

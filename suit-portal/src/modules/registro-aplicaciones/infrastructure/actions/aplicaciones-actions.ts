@@ -1,19 +1,10 @@
 "use server";
 
 import { createAplicacion } from "../../application/use-cases/create-aplicacion";
-import { repoAplicacionMock } from "../repositories/repo-aplicacion-mock";
+import { repoAplicacionApi } from "../repositories/repo-aplicacion-api";
+import { AplicacionApiError } from "../http/aplicaciones-api";
 import { aplicacionFormSchema } from "../../ui/schema/schema-aplicacion";
 
-/**
- * MOCKEADO A PROPÓSITO — sin conexión a backend real.
- *
- * TODO(gap #1 CONTRATO-API-ACTUAL.md): suit-orquestador todavia no expone
- * ningún endpoint para crear AplicacionRegistrada/DominioPermitido/
- * AplicacionProveedorPermitido — solo se gestiona por Django admin hoy. Cuando
- * ese CRUD exista, reemplazar `repoAplicacionMock` por un repo real
- * (infrastructure/repositories/repo-aplicacion-api.ts) que llame al endpoint
- * de suit-orquestador, sin tocar application/ ni ui/.
- */
 export async function createAplicacionAction(rawData: unknown) {
   const validation = aplicacionFormSchema.safeParse(rawData);
 
@@ -22,12 +13,15 @@ export async function createAplicacionAction(rawData: unknown) {
   }
 
   try {
-    await createAplicacion(repoAplicacionMock, validation.data);
+    await createAplicacion(repoAplicacionApi, validation.data);
     return {
       success:
-        "Solicitud registrada (simulada). Todavía no se envía a ningún backend real — ver nota en pantalla.",
+        "Aplicación registrada en suit-orquestador. Un administrador debe confirmar el dominio y el proveedor autorizados.",
     };
-  } catch {
-    return { error: "Error al registrar la aplicación (simulado)" };
+  } catch (error) {
+    if (error instanceof AplicacionApiError) {
+      return { error: error.friendlyMessage() };
+    }
+    return { error: "No se pudo registrar la aplicación. Intenta de nuevo más tarde." };
   }
 }

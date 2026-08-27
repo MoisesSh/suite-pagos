@@ -7,12 +7,25 @@ export default defineConfig({
   testDir: "./e2e/specs",
   fullyParallel: true,
   retries: 1,
-  webServer: {
-    command: "npm run dev -- -p 3100",
-    url: "http://localhost:3100",
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      // Stub hermético del CRUD admin de suit-orquestador — ver e2e/mocks/.
+      command: "node e2e/mocks/orquestador-admin-stub.mjs",
+      url: "http://localhost:4100/health",
+      reuseExistingServer: true,
+      timeout: 30_000,
+    },
+    {
+      command: "npm run dev -- -p 3100",
+      url: "http://localhost:3100",
+      reuseExistingServer: true,
+      timeout: 60_000,
+      env: {
+        ORQUESTADOR_API_URL: "http://localhost:4100",
+        ORQUESTADOR_ADMIN_TOKEN: "test-token-e2e",
+      },
+    },
+  ],
   use: {
     baseURL: "http://localhost:3100",
     screenshot: "only-on-failure",

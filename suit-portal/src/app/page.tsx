@@ -29,6 +29,7 @@ export default function Home() {
             <Button
               variant="outline"
               className="w-full"
+              nativeButton={false}
               render={<Link href="/documentacion" />}
             >
               Ver documentación
@@ -45,7 +46,11 @@ export default function Home() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full" render={<Link href="/aplicaciones/nueva" />}>
+            <Button
+              className="w-full"
+              nativeButton={false}
+              render={<Link href="/aplicaciones/nueva" />}
+            >
               Nueva solicitud
             </Button>
           </CardContent>

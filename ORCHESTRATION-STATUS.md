@@ -1,142 +1,194 @@
 # Estado de Orquestación — Suite Centralizada de Pagos
 
-> Mantenido por el coordinador (esta sesión). Se actualiza cada vez que un agente entrega
-> un avance o cambia de estado. No es responsabilidad de los agentes actualizarlo.
+> Mantenido por el coordinador. Punto de partida para retomar la sesión sin
+> perder contexto — leer esto primero en una sesión nueva, antes de tocar nada.
 
-Última actualización: 2026-08-27 12:26
+Última actualización: 2026-08-27 19:30
 
-## Estructura del proyecto (monorepo, un único repo git en la raíz)
+## Qué es este proyecto
+
+Payment gateway interno para Conatel: desacopla medios de pago del core de
+cada app (Conatel en Línea, Homologación, futuras). Dos servicios de datos
+independientes (Orquestador síncrono, Conciliación asíncrona) comunicados
+solo por eventos, un panel administrativo, y un Developer Portal. Primer y
+único proveedor real: **BDV Pago Móvil C2P** (documentación real de proveedor
+ya analizada, no un banco genérico). Ver `conatel-suite-pagos-roadmap.html`
+(actualizado con todas las decisiones tomadas) para el contexto de negocio
+completo.
+
+## Estructura (monorepo, un único repo git en la raíz)
 
 ```
-suit_pagos/                    ← repo git único (historial nuevo, commit inicial b904c3d)
-├── suit-orquestador/          ← Django/DRF — servicio Orquestador (síncrono), antes "suit-backend"
-├── suit-conciliacion/         ← Django/DRF — servicio Conciliación (asíncrono), nuevo
+suit_pagos/                    ← repo git único (historial nuevo desde b904c3d)
+├── suit-orquestador/          ← Django/DRF — Orquestador (síncrono)
+├── suit-conciliacion/         ← Django/DRF — Conciliación (asíncrono)
 ├── suit-frontend/             ← Next.js — panel administrativo interno
-├── suit-portal/               ← Next.js — Developer Portal (nuevo, para desarrolladores externos)
-├── investigaciones/           ← todos los research-*.md
-└── *.md, roadmap.html, PDFs de proveedores
+├── suit-portal/               ← Next.js — Developer Portal
+├── deploy/                    ← Dockerfiles + docker-compose.yml + .env (gitignored)
+├── investigaciones/           ← ~14 research-*.md con evidencia técnica
+└── *.md (documentos vivos, ver abajo), roadmap.html, 2 PDFs de BDV
 ```
 
-Cada subproyecto es independiente en tiempo de ejecución (DB propia, deploy propio),
-pero comparten un único repositorio git — decisión explícita del usuario tras
-detectar que 3 repos separados generaban fricción operativa innecesaria.
+Cada subproyecto es independiente en runtime (DB propia, deploy propio),
+comparten solo el repo git — decisión explícita del usuario.
 
-## Objetivo activo
+## Documentos vivos (leer en este orden para reconstruir contexto)
 
-Payment gateway interno para Conatel (Orquestador + Conciliación + Panel + Developer
-Portal), según `conatel-suite-pagos-roadmap.html` (ya actualizado con todas las
-decisiones de esta sesión).
+1. **Este archivo** — estado operativo, cómo retomar.
+2. `PLAN-DE-MEJORAS.md` — registro completo de los 12 bloques ejecutados,
+   con decisiones tomadas y verificaciones de cada uno. Es el changelog real.
+3. `CONTRATO-API-ACTUAL.md` — endpoints reales que existen HOY (no lo
+   planificado), con shapes verificados contra servidores reales.
+4. `db-plan-pagos.md` (raíz, copia) — plan de datos completo de ambos servicios.
+5. `ARQUITECTURA-HIBRIDA-RUST.md` — 2 componentes candidatos a extraer a Rust
+   (motor de matching, balance del ledger) cuando el volumen lo justifique.
+6. `investigaciones/*.md` — evidencia detrás de cada decisión de stack
+   (RabbitMQ vs Redis, Rust vs Django, schemas vs bases separadas, manejo de
+   dinero, outbox vs CDC, seguridad de iframe, arquitectura backend).
 
-## Tabla de agentes (7 activos)
+## Estado de infraestructura AHORA MISMO
 
-| Agente | Sesión Claude | Carpeta | Estado |
+**Stack Docker completo corriendo** (`docker compose -p suit-pagos -f deploy/docker-compose.yml`):
+
+| Servicio | URL | Notas |
+|---|---|---|
+| `suit-orquestador` | http://localhost:8001 | Swagger en `/api/docs/` |
+| `suit-conciliacion` | http://localhost:8002 | Swagger en `/api/docs/` |
+| `suit-frontend` | http://localhost:3000 | Login real funcionando |
+| `suit-portal` | http://localhost:3001 | Formulario de registro conectado real |
+| RabbitMQ management | http://localhost:15672 | user/pass guest/guest |
+| Flower | http://localhost:5555 | Monitoreo Celery |
+| `postgres-orquestador`, `postgres-conciliacion` | internos | Bases separadas, ya migradas |
+
+Usar **siempre `-p suit-pagos`** al correr `docker compose` sobre este
+proyecto (evita colisión de nombre con otros proyectos en el mismo host —
+ya pasó una vez, ver `PLAN-DE-MEJORAS.md` Bloque #11).
+
+**Servidores de prueba locales (fuera de Docker, para el iframe):**
+- `http://127.0.0.1:8010` — `manage.py runserver` de `suit-orquestador`
+  corriendo directo (no Docker), sirve `/api/autorizacion/cobro/formulario/`.
+- `http://localhost:5500` — servidor estático (`python -m http.server`) que
+  sirve `test-iframe-bloque10.html` (scratchpad del agente `suit-backend`),
+  necesario para que el origen sea `http://localhost:5500` y no `file://`
+  (el CSP `frame-ancestors` rechaza `file://`, correctamente).
+- Estos dos **no sobreviven un reinicio de máquina** — si hay que retomar la
+  prueba visual del iframe, hay que levantarlos de nuevo (ver comandos abajo).
+
+**Usuario real de staff (panel, `suit-conciliacion`):**
+`hmachado@conatel.gob.ve` / `3054=HitM` — `is_staff=True`, `is_superuser=True`.
+Vive en la base de Docker (`postgres-conciliacion`), no en ninguna base local.
+
+**Tokens admin generados (para `suit-portal` → CRUD de `suit-orquestador`):**
+Token real vive en `suit-portal/.env` (`ORQUESTADOR_ADMIN_TOKEN`) y corresponde
+al usuario `portal_admin` en la base Docker de `suit-orquestador`.
+
+## Tabla de agentes (8 activos ahora mismo, en Orca)
+
+| Agente | Handle de terminal | Carpeta | Rol |
 |---|---|---|---|
-| `research` | `research` | raíz | Transversal, briefeado tras reinicio de runtime, en espera |
-| `expert_database` | `expert_database` | `suit-orquestador/` | Modelado Orquestador maduro (`db-plan-pagos.md`) |
-| `suit-backend` | `suit-backend` | `suit-orquestador/` | Bloque #1 y #2 completados y verificados contra Postgres real |
-| `expert_database_conciliacion` | `expert_database_conciliacion` | `suit-conciliacion/` | Resolvió 6 gaps de modelado en sección 3, 1 punto de negocio resuelto |
-| `suit-conciliacion` | `suit-conciliacion` | `suit-conciliacion/` | Bloque de próximo paso #1 autorizado, en ejecución |
-| `suit-frontend` | `suit-frontend` | `suit-frontend/` | Panel admin, build verificado, en espera de contrato de API |
-| `suit-portal` | `suit-portal` | `suit-portal/` | Developer Portal, scaffold confirmado, en espera de contrato de API de registro de apps/dominios |
+| `research` | `term_58452870-0b7b-4bc2-b292-0b20b1fadb9c` | raíz | Investigación transversal |
+| `expert_database` | `term_1dd78f9c-d028-41c9-9bc6-0185f874fd85` | `suit-orquestador/` | Modelado de datos Orquestador |
+| `suit-backend` | `term_5f77227b-4a22-406f-b04f-bee4f32177b6` | `suit-orquestador/` | Backend Django Orquestador |
+| `expert_database_conciliacion` | `term_6e8d137c-26bf-4db1-abe0-bbd8894813d0` | `suit-conciliacion/` | Modelado de datos Conciliación |
+| `suit-conciliacion` | `term_3324f6c0-b75c-4721-ad24-3d018077b762` | `suit-conciliacion/` | Backend Django Conciliación |
+| `suit-frontend` | `term_2d26d5f0-4885-4db6-9edf-d180ebd56a73` | `suit-frontend/` | Panel admin Next.js |
+| `suit-portal` | `term_77daed55-1eed-43ba-8346-5e84fc4594ea` | `suit-portal/` | Developer Portal Next.js |
 
-## Regla de ejecución vigente (todos los agentes de código)
+**Nota:** hay 4 handles adicionales (`term_c2002c32...`, `term_643afdaf...`,
+`term_e624cb9d...`, `term_cf0a073f...`) que son terminales huérfanos de
+reinicios previos del runtime de Orca — no usarlos, no están briefeados con
+el contexto actual. Si al retomar la sesión los handles de arriba ya no
+responden (el runtime de Orca se reinició de nuevo, ya pasó varias veces),
+recrear con `orca terminal create --worktree "id:<repoId>::<path>" --command
+"claude -n <nombre>"` y re-briefar con los documentos vivos de arriba — el
+trabajo real nunca se pierde porque vive en git/Postgres, no en la sesión.
 
-Ningún agente ejecuta trabajo directamente: arman un **bloque de próximo paso**
-(qué se hará, alcance, archivos afectados, qué falta confirmar) y esperan la
-orden de ejecución explícita del coordinador antes de tocar código.
+## Reglas de trabajo vigentes (todos los agentes)
 
-**Regla de comunicación (2026-08-27):** ningún agente espera que el usuario
-escriba directamente en su terminal, ni se bloquea en un diálogo interactivo
-esperando su respuesta — el usuario no mira las terminales de los agentes,
-solo el coordinador. Toda pregunta o decisión bloqueante se escribe como texto
-plano dirigido al coordinador, y el agente queda en espera normal (no en un
-menú de selección). El coordinador la lleva al usuario y trae la respuesta.
+1. **Bloque de próximo paso obligatorio**: ningún agente ejecuta código sin
+   presentar antes qué va a hacer, alcance, archivos afectados — y esperar
+   la orden explícita del coordinador.
+2. **Comunicación solo a través del coordinador**: ningún agente espera que
+   el usuario escriba directo en su terminal ni se bloquea en un diálogo
+   interactivo — las preguntas se escriben como texto plano y el agente
+   queda en espera normal.
+3. **YAGNI consistente**: no se suma infraestructura/dependencia/abstracción
+   sin una necesidad real y medible (aplicado a Redis, Rust, CDC, librerías
+   de dinero, roles de usuario — todos evaluados y diferidos hasta que haya
+   evidencia real de necesidad).
 
-## Decisiones de arquitectura confirmadas
+## Qué se construyó (resumen — detalle completo en `PLAN-DE-MEJORAS.md`)
 
-- **Monorepo único** en la raíz, historial de git nuevo (no se preservó el de los
-  3 repos previos, por decisión del usuario — el historial previo era mínimo).
-- **Backend en Django/DRF**, arquitectura híbrida con Rust confirmada para dos
-  componentes puntuales cuando el volumen lo justifique: motor de matching de
-  Conciliación y validación de balance del ledger de doble entrada (ver
-  `ARQUITECTURA-HIBRIDA-RUST.md`). Ambos quedan detrás de un puerto explícito
-  desde el día 1, aunque implementados en Python.
-- **Multi-proveedor sin choque** es principio de diseño obligatorio.
-- **`suit-frontend`** = panel administrativo interno. **`suit-portal`** = Developer
-  Portal externo (registro de apps, API keys, dominios, documentación). El
-  formulario de cobro real se sirve embebido por iframe en las apps consumidoras
-  (`frame-ancestors` dinámico + validación Origin/Referer en backend).
-- **Registro de seguridad de apps/dominios** vive en `suit-orquestador` —
-  `AplicacionRegistrada`, `DominioPermitido`, `AplicacionProveedorPermitido`.
-  Ya implementado y verificado (`ValidacionAccesoService` + endpoint).
-- **Bases de datos PostgreSQL completamente separadas** por servicio (no schemas
-  compartidos) — `orquestador_pagos` ya creada y en uso; Conciliación tendrá su
-  propia base cuando `suit-conciliacion` llegue a las migraciones.
-- **RabbitMQ + Celery**, sin Redis como broker (rol futuro acotado a cache/locks).
-- **Relay outbox → RabbitMQ**: poller Celery simple (no Debezium/CDC) del lado
-  Orquestador. Del lado Conciliación: worker Celery consumiendo directo de la
-  cola `pago.*` (patrón estándar, no poller — eso es específico del outbox).
-- **Fuera de alcance por ahora**: tarjeta y tokenización. Único medio de pago
-  real: BDV Pago Móvil C2P.
-- **Manejo de dinero**: `Decimal`/`DECIMAL` nativo, sin librería externa
-  (`django-money` evaluada y descartada por ahora — el sistema no hace
-  conversión de divisas).
-- **Balance-cero del ledger y transiciones de estado**: forzados con
-  constraint/trigger a nivel Postgres, no solo disciplina de servicio
-  (ya implementado y probado funcionalmente en `suit-orquestador`).
-- **Auth de staff de Conciliación**: usuario propio local (`apps/users` dentro
-  de `suit-conciliacion`), no identidad de otro servicio — `Discrepancia.resuelto_por`
-  es FK real con `SET_NULL`.
+**`suit-orquestador`** — 13 bloques completados: modelos base, validación de
+acceso (dominio→app→proveedor), adaptador BDV C2P real, endpoint público de
+cobro (con token de checkout firmado — **fix de seguridad real**: el monto
+está atado criptográficamente al token, nunca en un query param editable),
+contrato del evento `pago.confirmado` + escritura de outbox, relay
+outbox→RabbitMQ, Swagger, CRUD de registro de apps/dominios, **formulario de
+cobro embebido por iframe** (con CSP `frame-ancestors` dinámico, selector de
+banco poblado desde catálogo real — el hardcode a BDV se corrigió porque
+rompía la interoperabilidad interbancaria que el propio servicio soporta).
 
-## Avances de código verificados
+**`suit-conciliacion`** — modelos completos (ledger de doble entrada,
+matching, discrepancias), cliente HTTP real a BDV, worker Celery consumiendo
+RabbitMQ real, permisos de staff (solo `is_staff` resuelve discrepancias).
+Encontró y corrigió 2 bugs reales de producción (colisión de nombres de cola
+Celery/RabbitMQ, migración de trigger nunca probada contra Postgres real).
 
-**`suit-orquestador`** (Postgres real, base `orquestador_pagos`):
-- `apps/autorizacion`: catálogos (Moneda, MedioPago, ProveedorPago, Banco,
-  TipoOperacionProveedor, CodigoRespuestaProveedor), agregado de pago
-  (IntencionPago, TransicionEstadoPago, Autorizacion/Captura/Anulacion/Reembolso),
-  outbox/idempotencia (EventoOutbox, IdempotencyKey con expires_at=48h).
-- Trigger PL/pgSQL de transiciones de estado, probado funcionalmente (acepta
-  válidas, rechaza saltos inválidos y estados desincronizados).
-- `ValidacionAccesoService` + endpoint `POST /api/autorizacion/validar-acceso/`
-  (control de seguridad bloqueante dominio→app→proveedor), 10 tests pasando.
-- Commit `f62e3f3` (historial previo, ya integrado al monorepo).
+**`suit-frontend`** — login + Discrepancias + Eventos, verificado end-to-end
+contra el backend real (encontró y corrigió 4 desvíos reales del contrato:
+paginación DRF, auth de logout, rotación de refresh token, nombre de estado).
 
-**`suit-conciliacion`**: bloque de próximo paso #1 autorizado y en ejecución
-(apps/shared, apps/users con auth JWT local, apps/conciliacion con el agregado
-completo de la sección 3 del plan — catálogos, ingesta, matching BDV, ledger
-de doble entrada, discrepancias, endpoints mínimos).
+**`suit-portal`** — landing, visor de Swagger, formulario de registro de
+apps **ya conectado de verdad** (no mockeado) al CRUD del Orquestador.
 
-**`suit-frontend`** y **`suit-portal`**: solo scaffold verificado (build exitoso),
-sin código de dominio — ambos en espera del contrato de API del backend.
+**Verificación de integración real end-to-end**: cobro real contra BDV QA →
+Orquestador → RabbitMQ real → Conciliación → matching → discrepancia. Todo
+probado contra infraestructura real, nunca simulado — esto encontró **9 bugs
+reales de producción** a lo largo de la sesión (ninguno visible en desarrollo
+aislado, todos aparecieron al integrar de verdad).
 
-## Documentos de referencia
+## Decisiones de arquitectura clave (no reabrir sin evidencia nueva)
 
-- `conatel-suite-pagos-roadmap.html` — actualizado con todas las decisiones.
-- `DB-MODELO.md` — diagramas Mermaid del modelo de datos.
-- `ARQUITECTURA-HIBRIDA-RUST.md` — componentes candidatos a extraer a Rust.
-- `db-plan-pagos.md` (raíz, copia de referencia; el vivo está en `suit-orquestador/`
-  y `suit-conciliacion/`) — plan de datos completo de ambos servicios.
-- `investigaciones/*.md` — 10 investigaciones técnicas con evidencia (RabbitMQ vs
-  Redis, Rust vs Django, schemas vs bases separadas, manejo de dinero, outbox vs
-  CDC, seguridad de iframes, arquitectura backend, etc.)
+- Backend Django/DRF, híbrido con Rust diferido (2 componentes candidatos,
+  puertos ya definidos, sin implementar).
+- Bases PostgreSQL completamente separadas por servicio (no schemas).
+- RabbitMQ + Celery, sin Redis como broker (rol futuro: cache/locks).
+- Relay outbox: poller Celery, no CDC/Debezium (documentado como ruta de
+  evolución futura si el volumen lo exige).
+- Fuera de alcance: tarjeta, tokenización, conversión de divisas.
+- Sin librería externa de manejo de dinero (`Decimal` nativo alcanza).
+- Auth de staff vía Django admin, sin flujo de autoregistro (volumen bajo,
+  interno) — mismo criterio para admin de apps del Orquestador.
+- Sentry: evaluado, pospuesto (self-hosted es desproporcionado; se retoma
+  con un DSN real, solo el SDK).
 
-## Puntos abiertos pendientes de decisión del usuario
+## Gaps conocidos, no bloqueantes
 
-1. Proveedor real de tokenización — diferido, fuera de alcance actual.
-2. Catálogo definitivo de monedas más allá de VES/USD — no urgente.
-3. Confirmar `AppConsumidora`/API keys — resuelto: viven en `suit-orquestador`
-   (registro de seguridad), `suit-portal` es solo la interfaz de gestión.
-4. Ventana de expiración de `IdempotencyKey.expires_at` — resuelto: 48h.
-5. Gobernanza del registro de esquemas de eventos versionados — pendiente,
-   no bloqueante para el MVP.
-6. Semántica de reintentos multi-adquirente — despriorizado hasta T4.
+1. **Developer Portal sin login propio de usuario externo** — hoy es un
+   server Next.js con un token admin fijo en `.env`, no hay auto-registro de
+   desarrolladores externos con su propia cuenta. Evaluado explícitamente,
+   sin decisión tomada todavía (usuario dijo "ya veremos" sobre otros temas
+   similares — mismo criterio probablemente aplica acá).
+2. **Sentry** — sin DSN real conectado.
+3. **`suit-orquestador` sin auth JWT de usuario final** — solo
+   `TokenAuthentication` para admin/M2M; decisión de que el panel
+   (`suit-frontend`) solo lee de Conciliación por ahora, no del Orquestador.
 
-## Notas operativas
+## Comandos útiles para retomar
 
-- El runtime de Orca se reinició varias veces durante esta sesión, matando
-  terminales de agentes sin previo aviso. El trabajo en archivos nunca se
-  perdió (todo en disco/git), solo las sesiones — recrear terminales con
-  `orca terminal create` y re-briefar con los archivos ya guardados.
-- Los agentes pueden mandarse mensajes entre sí de forma nativa vía Orca
-  (`@nombre-agente`) — ya se usó entre `expert_database_conciliacion` y
-  `suit-conciliacion` para coordinar el esquema antes de escribir código.
+```bash
+# Verificar que el stack Docker sigue vivo
+docker compose -p suit-pagos -f deploy/docker-compose.yml ps
+
+# Si se cayó, levantarlo de nuevo
+docker compose -p suit-pagos -f deploy/docker-compose.yml up -d
+
+# Re-levantar los servidores de prueba del iframe (si hace falta)
+cd suit-orquestador && source .venv/Scripts/activate && python manage.py runserver 8010
+cd <scratchpad-de-suit-backend> && python -m http.server 5500
+
+# Generar un checkout_token fresco para probar el iframe (vencen a los 15 min)
+# Pedirselo directamente al agente suit-backend, sabe el mecanismo exacto
+# (CheckoutTokenService.generar) y dónde vive el archivo de prueba.
+```

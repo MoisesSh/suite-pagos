@@ -18,7 +18,7 @@ describe("generarCheckoutDePrueba", () => {
       proveedor: "BDV",
       monto: "1000.60",
       moneda: "VES",
-      concepto: "Prueba desde Developer Portal",
+      concepto: "Pago",
     });
   });
 

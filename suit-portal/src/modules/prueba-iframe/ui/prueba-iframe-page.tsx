@@ -91,16 +91,25 @@ export default function PruebaIframePage({ resultado }: { resultado: CheckoutSes
                 <p className="text-muted-foreground">Teléfono</p>
                 <p className="font-medium text-foreground">04125692243</p>
               </div>
+              <div>
+                <p className="text-muted-foreground">Código OTP</p>
+                <p className="font-medium text-foreground">5551111</p>
+              </div>
               <p className="text-xs text-muted-foreground">
                 Valores exactos documentados en el PDF dummy de BDV QA — cualquier otro dato no
-                funciona contra el ambiente de pruebas.
+                funciona contra el ambiente de pruebas. En este ambiente Calidad, BDV no envía SMS
+                real: el OTP siempre es el valor fijo de arriba.
               </p>
               <p className="text-xs text-muted-foreground">
-                Quirk conocido del ambiente QA: si llegás a confirmar el cobro con OTP, el dummy
-                de BDV puede responder con un código <code>1001</code> no documentado — hace
-                match literal contra <code>&quot;1000.6&quot;</code> del PDF, y el monto de esta
-                prueba viaja como <code>&quot;1000.60&quot;</code> (2 decimales, el formato
-                correcto de producción). No es un bug de este Portal ni del Orquestador.
+                Quirk conocido del ambiente QA, no un bug: al confirmar el cobro con el OTP, este
+                dummy específico de BDV <strong>siempre</strong> va a responder con el código{" "}
+                <code>1001</code> no documentado. El dummy exige match literal contra{" "}
+                <code>&quot;1000.6&quot;</code> del PDF, pero el <code>DecimalField(19,2)</code>{" "}
+                de producción del Orquestador cuantiza cualquier monto a 2 decimales
+                (<code>&quot;1000.60&quot;</code>) sin excepción — evitarlo exigiría romper el
+                formato real de producción solo para esta pantalla de prueba, y es una decisión
+                explícita no construir ese override. No es un bug de este Portal ni del
+                Orquestador.
               </p>
             </CardContent>
           </Card>

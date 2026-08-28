@@ -11,7 +11,9 @@ const CHECKOUT_DE_PRUEBA: GenerarCheckoutParams = {
   proveedor: "BDV",
   monto: "1000.60",
   moneda: "VES",
-  concepto: "Prueba desde Developer Portal",
+  // Literal "Pago": el dummy de BDV QA matchea el concepto contra el
+  // ejemplo del PDF, igual que el monto (ver PLAN-DE-MEJORAS.md Bloque #14).
+  concepto: "Pago",
 };
 
 export async function generarCheckoutDePrueba(repo: RepoCheckoutSession) {

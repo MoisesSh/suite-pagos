@@ -26,6 +26,13 @@ if DEBUG and not CORS_ALLOWED_ORIGINS:
     CORS_ALLOW_ALL_ORIGINS = True  # solo en desarrollo sin configurar
 CORS_ALLOW_CREDENTIALS = True  # el refresh token viaja en cookie HttpOnly
 
+# Origen fijo del Developer Portal (suit-portal), permitido a embeber
+# /api/docs/ y /api/schema/ por iframe (ver config/urls.py). Documentación
+# interna, no un flujo de pago crítico (a diferencia del formulario de cobro
+# del Orquestador) — alcanza con un origen fijo por env var, sin catálogo
+# dinámico de dominios ni token firmado.
+PORTAL_ORIGIN = env('PORTAL_ORIGIN', default='http://localhost:3001')
+
 
 # Application definition
 

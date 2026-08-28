@@ -99,6 +99,9 @@ services:
       DATABASE_URL: postgres://${CONCILIACION_DB_USER:-postgres}:${CONCILIACION_DB_PASSWORD}@postgres-conciliacion:5432/${CONCILIACION_DB_NAME:-conciliacion_pagos}
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
       ALLOWED_HOSTS: suit-conciliacion,localhost,127.0.0.1
+      # Origen del Developer Portal (suit-portal) autorizado a embeber
+      # /api/docs/ y /api/schema/ por iframe — ver config/urls.py.
+      PORTAL_ORIGIN: ${PORTAL_ORIGIN:-http://localhost:3001}
     ports:
       - "8002:8000"
 

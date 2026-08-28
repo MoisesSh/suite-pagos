@@ -60,14 +60,18 @@ de la cookie `refresh_token` (HttpOnly, `Path=/api/auth/`, `SameSite=Strict`).
 
 **Sin auth JWT propia todavía** (los endpoints de autorización son `AllowAny`,
 diseñados para ser llamados por apps consumidoras/servidores, no por un usuario
-logueado en un panel). No expone Swagger todavía (drf-spectacular no está en
-`requirements.txt` de este proyecto aún).
+logueado en un panel). **Swagger disponible** en `/api/docs/` (Bloque #9,
+`DEBUG=True`).
 
 | Método | Ruta | Body | Respuesta |
 |---|---|---|---|
-| POST | `/api/autorizacion/validar-acceso/` | `{"dominio": "...", "proveedor": "BDV"}` | 200 `{"autorizado": true, "aplicacion": "..."}` o 403 `{"autorizado": false, "motivo": "dominio_no_registrado\|dominio_inactivo\|aplicacion_inactiva\|proveedor_no_encontrado\|proveedor_no_autorizado"}` |
-| POST | `/api/autorizacion/cobro/otp/` | *(en desarrollo — Bloque #4)* | — |
-| POST | `/api/autorizacion/cobro/` | *(en desarrollo — Bloque #4, requiere token de sesión de checkout emitido por `validar-acceso`)* | — |
+| POST | `/api/autorizacion/validar-acceso/` | `{"dominio", "proveedor", "monto", "moneda", "concepto"}` — **`monto`/`moneda`/`concepto` obligatorios desde el Bloque #10** (fix de seguridad: se atan criptográficamente al `checkout_token`, nunca viajan sueltos en un query param editable) | 200 `{"autorizado": true, "aplicacion": "...", "checkout_token": "..."}` o 403 `{"autorizado": false, "motivo": "dominio_no_registrado\|dominio_inactivo\|aplicacion_inactiva\|proveedor_no_encontrado\|proveedor_no_autorizado"}` |
+| POST | `/api/autorizacion/cobro/otp/` | `{"checkout_token", "proveedor", "cedula_pagador"}` | Dispara OTP real contra BDV — `{"resultado": "otp_enviado"}` o error de proveedor |
+| POST | `/api/autorizacion/cobro/` | `{"checkout_token", "proveedor", "idempotency_key", "cedula_pagador", "telefono_pagador", "otp", "banco_codigo"}` — **ya no acepta `monto`/`moneda`** (Bloque #10), se leen del `checkout_token` verificado | Cobro real ejecutado, `IntencionPago` capturado |
+| GET | `/api/autorizacion/cobro/formulario/?checkout_token=...` | — | **Bloque #10**: HTML del formulario de cobro embebible por iframe (cédula, teléfono, selector de banco poblado del catálogo real, OTP). `Content-Security-Policy: frame-ancestors <dominio>:*` dinámico según la app dueña del token; `postMessage` con `targetOrigin` exacto al terminar. `checkout_token` vence a los 15 min (`CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS`). |
+
+`checkout_token` es opaco (firmado, no se decodifica del lado del cliente) —
+encapsula `aplicacion_id`, `proveedor_codigo`, `monto`, `moneda`, `concepto`.
 
 ### Admin — registro de apps/dominios (`api/admin_views.py`, `TokenAuthentication` + `IsAdminUser`)
 

@@ -22,6 +22,8 @@ services:
       POSTGRES_PASSWORD: ${ORQUESTADOR_DB_PASSWORD}
     volumes:
       - postgres_orquestador_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432" # solo dev/staging — para conectar con un cliente SQL (DBeaver, etc.) desde el host
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${ORQUESTADOR_DB_USER:-postgres}"]
       interval: 10s
@@ -36,6 +38,8 @@ services:
       POSTGRES_PASSWORD: ${CONCILIACION_DB_PASSWORD}
     volumes:
       - postgres_conciliacion_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432" # solo dev/staging — para conectar con un cliente SQL (DBeaver, etc.) desde el host
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${CONCILIACION_DB_USER:-postgres}"]
       interval: 10s

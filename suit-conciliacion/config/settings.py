@@ -210,13 +210,15 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TIMEZONE = TIME_ZONE
-# El pidbox de Celery (control remoto: ping/inspect/broadcast) declara su cola
-# de mailbox con `transient_nonexcl_queues`, una feature que RabbitMQ 4.x
-# deprecó y rechaza por defecto (confirmado end-to-end contra el contenedor
-# rabbitmq:4.3-management-alpine de este monorepo — sin esto el worker entra
-# en loop de reconexión/crash). No se usa `celery inspect`/`celery control` en
-# este proyecto, así que se desactiva en vez de tocar la config del broker.
-CELERY_WORKER_ENABLE_REMOTE_CONTROL = False
+# El pidbox de Celery (control remoto: ping/inspect/broadcast), gossip/mingle
+# del worker, y el inspector de Flower declaran colas con
+# `transient_nonexcl_queues`, una feature que RabbitMQ 4.x rechaza por defecto
+# (error 541). En vez de desactivar remote control (lo que además rompe el
+# `inspect` que Flower necesita para listar workers — ver PLAN-DE-MEJORAS.md,
+# Bloque #14), se reactiva la feature deprecada a nivel de broker en
+# `deploy/rabbitmq.conf` (`deprecated_features.permit.transient_nonexcl_queues`),
+# que cubre pidbox/gossip/mingle/Flower a la vez sin apagar ninguno.
+CELERY_WORKER_ENABLE_REMOTE_CONTROL = True
 
 
 # --------------------------------------------------------------------------

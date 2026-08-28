@@ -23,11 +23,10 @@ FROM deps AS runner
 
 COPY suit-conciliacion/ .
 
-# --without-gossip/--without-mingle/--without-heartbeat: RabbitMQ 4.x rechaza
-# las colas transitorias exclusivas que gossip/mingle declaran para
-# coordinacion entre workers (error 541 transient_nonexcl_queues, mismo
-# problema que ya se resolvio para el pidbox via
-# CELERY_WORKER_ENABLE_REMOTE_CONTROL=False en settings.py, pero esa variable
-# no cubre gossip/mingle). Sin esto el worker crashea en loop y nunca llega a
-# consumir nada ni a registrarse en Flower.
-CMD ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=4", "--without-gossip", "--without-mingle", "--without-heartbeat"]
+# -E: habilita el envio de task/worker events (exchange celeryev) — sin esto
+# Flower nunca ve workers ni tareas, porque por default Celery no los emite.
+# (El error 541 transient_nonexcl_queues de RabbitMQ 4.x que este worker y
+# Flower declaran via pidbox/gossip/mingle/events se resuelve a nivel de
+# broker en deploy/rabbitmq.conf — ver PLAN-DE-MEJORAS.md, Bloque #14 — no con
+# flags acá, que además rompian el `inspect` de Flower.)
+CMD ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=4", "-E"]

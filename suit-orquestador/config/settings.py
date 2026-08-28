@@ -222,13 +222,10 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TIMEZONE = TIME_ZONE
-# Mismo fix que encontró el equipo de Conciliación: el pidbox de Celery (control
-# remoto ping/inspect/broadcast) declara su cola de mailbox con
-# `transient_nonexcl_queues`, deprecado y rechazado por RabbitMQ 4.x por defecto
-# (error 541) — sin esto el worker entra en loop de reconexión/crash. No se usa
-# `celery inspect`/`celery control` en este proyecto, así que se desactiva en vez
-# de tocar la config del broker.
-CELERY_WORKER_ENABLE_REMOTE_CONTROL = False
+# Ver mismo comentario en suit-conciliacion/config/settings.py: el fix real
+# para `transient_nonexcl_queues` (error 541 de RabbitMQ 4.x) vive ahora en
+# `deploy/rabbitmq.conf`, no acá — no hace falta desactivar remote control.
+CELERY_WORKER_ENABLE_REMOTE_CONTROL = True
 
 OUTBOX_RELAY_LOTE_SIZE = int(os.environ.get('OUTBOX_RELAY_LOTE_SIZE', '100'))
 OUTBOX_RELAY_MAX_INTENTOS = int(os.environ.get('OUTBOX_RELAY_MAX_INTENTOS', '5'))

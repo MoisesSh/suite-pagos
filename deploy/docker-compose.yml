@@ -49,6 +49,7 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq.conf:/etc/rabbitmq/conf.d/99-suit-pagos.conf:ro
     ports:
       - "15672:15672" # management UI, solo dev/staging
       - "5672:5672" # AMQP, solo dev/staging — para probar el consumer Celery desde el host
@@ -129,6 +130,7 @@ services:
     environment:
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
       FLOWER_PORT: 5555
+      FLOWER_UNAUTHENTICATED_API: "true" # el propio dashboard (JS del navegador) llama a /api/*; sin esto Flower bloquea esas llamadas y la UI queda vacia. Sin auth propia -> solo dev/staging, mismo criterio que el resto de este servicio.
     ports:
       - "5555:5555" # monitoreo de tareas Celery — solo dev/staging, sin auth propia
 

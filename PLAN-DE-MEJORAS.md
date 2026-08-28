@@ -49,6 +49,38 @@ misma prueba): además del monto literal (`"1000.6"`, ver Bloque #8), el campo
 `concept` también matchea literal contra el ejemplo del PDF (`"Pago"`) —
 cualquier otro texto dispara el mismo código no documentado `1001`.
 
+**Actualización del mismo bloque — causa raíz real y fix definitivo:** el
+fix de arriba (`--without-gossip/--without-mingle`) resolvió el crash-loop
+pero introdujo un problema nuevo: reportado por el usuario ("en flower no veo
+nada, no me muestra nada"). Investigando se encontró que **Flower declara su
+propia cola de eventos exclusiva/transitoria** (mecanismo `celeryev`,
+independiente de gossip/mingle) y choca con el mismo error 541 — no hay flag
+de arranque de Flower para evitarlo. Además, `CELERY_WORKER_ENABLE_REMOTE_CONTROL
+= False` (el fix original del pidbox, Bloque #1 de Conciliación) apaga
+también el `inspect` que Flower necesita para listar workers/stats, aunque el
+worker esté sano.
+
+**Fix definitivo, a nivel de broker en vez de parchear cada cliente:**
+`deploy/rabbitmq.conf` (nuevo, montado en el contenedor `rabbitmq`) reactiva
+las dos features deprecadas que de verdad estaban causando todo esto:
+```
+deprecated_features.permit.transient_nonexcl_queues = true
+deprecated_features.permit.global_qos = true
+```
+Con esto, `CELERY_WORKER_ENABLE_REMOTE_CONTROL` vuelve a su default (`True`)
+en ambos backends, y el `CMD` de `deploy/Dockerfile.celery-worker` vuelve a
+ser simple (`celery worker -E`, sin ningún `--without-*`). Verificado en vivo:
+worker con mingle activo (`mingle: all alone`, sin crashear), Flower
+mostrando el worker real vía `GET /api/workers` (stats, pool, cola activa,
+tarea registrada) tras reiniciarlo tras el arranque del worker.
+
+**Lección:** los fixes puntuales de Bloques #1/#6 (desactivar remote control)
+eran correctos para lo que tenían delante en ese momento, pero escondían la
+causa raíz (una feature deprecada del broker) detrás de un parche por
+cliente — cada nuevo consumidor de RabbitMQ (gossip/mingle, luego Flower)
+volvía a pisar el mismo error 541 de una forma distinta. Corregirlo una vez
+en la config del broker evita seguir jugando a las escondidas con este bug.
+
 ---
 
 ## Bloque #10 — Verificación de despliegue completo con Docker ✅ COMPLETADO — HITO FINAL

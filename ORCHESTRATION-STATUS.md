@@ -3,7 +3,7 @@
 > Mantenido por el coordinador. Punto de partida para retomar la sesión sin
 > perder contexto — leer esto primero en una sesión nueva, antes de tocar nada.
 
-Última actualización: 2026-08-27 19:30
+Última actualización: 2026-08-28 (agentes re-briefeados tras reinicio del runtime de Orca)
 
 ## Qué es este proyecto
 
@@ -82,26 +82,32 @@ Vive en la base de Docker (`postgres-conciliacion`), no en ninguna base local.
 Token real vive en `suit-portal/.env` (`ORQUESTADOR_ADMIN_TOKEN`) y corresponde
 al usuario `portal_admin` en la base Docker de `suit-orquestador`.
 
-## Tabla de agentes (8 activos ahora mismo, en Orca)
+## Tabla de agentes (7 activos ahora mismo, en Orca)
+
+Todos son terminales dentro del **mismo worktree raíz** (`suite-pago`,
+`repoId fef35803-da2f-43cc-8eaa-50f4e6be4bae`) — no son worktrees git
+separados, solo `cd <carpeta> && claude -n <nombre>` dentro del monorepo.
 
 | Agente | Handle de terminal | Carpeta | Rol |
 |---|---|---|---|
-| `research` | `term_58452870-0b7b-4bc2-b292-0b20b1fadb9c` | raíz | Investigación transversal |
-| `expert_database` | `term_1dd78f9c-d028-41c9-9bc6-0185f874fd85` | `suit-orquestador/` | Modelado de datos Orquestador |
-| `suit-backend` | `term_5f77227b-4a22-406f-b04f-bee4f32177b6` | `suit-orquestador/` | Backend Django Orquestador |
-| `expert_database_conciliacion` | `term_6e8d137c-26bf-4db1-abe0-bbd8894813d0` | `suit-conciliacion/` | Modelado de datos Conciliación |
-| `suit-conciliacion` | `term_3324f6c0-b75c-4721-ad24-3d018077b762` | `suit-conciliacion/` | Backend Django Conciliación |
-| `suit-frontend` | `term_2d26d5f0-4885-4db6-9edf-d180ebd56a73` | `suit-frontend/` | Panel admin Next.js |
-| `suit-portal` | `term_77daed55-1eed-43ba-8346-5e84fc4594ea` | `suit-portal/` | Developer Portal Next.js |
+| `research` | `term_253dc15b-1d76-4e89-ab74-c9c3e77f1d2b` | raíz | Investigación transversal |
+| `expert_database` | `term_f84dffdd-c3f0-422d-8f8c-a9f2c11fc028` | `suit-orquestador/` | Modelado de datos Orquestador |
+| `suit-backend` | `term_4aab9efe-9493-4b10-b27f-8dbb379928d8` | `suit-orquestador/` | Backend Django Orquestador |
+| `expert_database_conciliacion` | `term_4a897c08-7477-4480-9ce2-e0a7de5743a2` | `suit-conciliacion/` | Modelado de datos Conciliación |
+| `suit-conciliacion` | `term_46697366-2df2-4255-b24a-57ee4e95818a` | `suit-conciliacion/` | Backend Django Conciliación |
+| `suit-frontend` | `term_94060374-221d-440c-ad4b-218171a4a527` | `suit-frontend/` | Panel admin Next.js |
+| `suit-portal` | `term_a7f1b738-d1cf-492a-8322-c9dada14136a` | `suit-portal/` | Developer Portal Next.js |
 
-**Nota:** hay 4 handles adicionales (`term_c2002c32...`, `term_643afdaf...`,
-`term_e624cb9d...`, `term_cf0a073f...`) que son terminales huérfanos de
-reinicios previos del runtime de Orca — no usarlos, no están briefeados con
-el contexto actual. Si al retomar la sesión los handles de arriba ya no
-responden (el runtime de Orca se reinició de nuevo, ya pasó varias veces),
-recrear con `orca terminal create --worktree "id:<repoId>::<path>" --command
-"claude -n <nombre>"` y re-briefar con los documentos vivos de arriba — el
-trabajo real nunca se pierde porque vive en git/Postgres, no en la sesión.
+**Nota:** los handles anteriores (documentados en la versión previa de este
+archivo) quedaron huérfanos por un reinicio del runtime de Orca — no
+responden. Si al retomar la sesión los handles de arriba tampoco responden
+(ya ha pasado varias veces), recrear con `orca terminal create --worktree
+"id:fef35803-da2f-43cc-8eaa-50f4e6be4bae::/home/hmachado/Documentos/suit-pagos/suite-pago"
+--command "cd <carpeta> && claude -n <nombre>"` y re-briefar con los
+documentos vivos de arriba — el trabajo real nunca se pierde porque vive en
+git/Postgres, no en la sesión. Cada agente fue re-briefeado el 2026-08-28
+con: su carpeta, los documentos vivos a leer, su rol, y la regla de esperar
+orden explícita del coordinador antes de tocar código.
 
 ## Reglas de trabajo vigentes (todos los agentes)
 

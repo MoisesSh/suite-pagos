@@ -5,7 +5,49 @@
 > antes de recibir la orden de ejecución del coordinador. Se agrega un bloque nuevo
 > cada vez que un agente propone el siguiente incremento de trabajo.
 
-Última actualización: 2026-08-27 18:15
+Última actualización: 2026-08-28 03:10
+
+---
+
+## Bloque #14 — Fix: crash-loop del worker Celery de Conciliación (gossip/mingle) ✅ COMPLETADO
+
+**Encontrado por:** coordinador y `suit-backend`, en paralelo, mientras se corría un
+cobro real end-to-end contra Docker a pedido del usuario · **Resuelto por:** coordinador
+
+**Bug:** `suit-pagos-suit-conciliacion-celery-worker-1` llevaba **toda la sesión**
+en crash-loop (`RestartFreqExceeded: 5 in 1s`) pese al fix
+`CELERY_WORKER_ENABLE_REMOTE_CONTROL=False` ya aplicado en el Bloque #1 de
+Conciliación — el contenedor mostraba "Up" en `docker ps` porque Docker no ve el
+restart interno de billiard, solo el proceso padre. Traceback real:
+`kombu/pidbox.py:309 _publish → kombu/common.py:maybe_declare` — no era la cola
+de negocio (`conciliacion.eventos_pago.inbox`, correctamente `durable=True`),
+sino que **gossip/mingle** (coordinación worker-a-worker, mecanismo distinto del
+pidbox) también declaran colas transitorias exclusivas que RabbitMQ 4.x rechaza
+con el mismo error 541 `transient_nonexcl_queues`.
+`CELERY_WORKER_ENABLE_REMOTE_CONTROL=False` solo cubre el pidbox, no gossip/mingle.
+
+**Fix:** `--without-gossip --without-mingle --without-heartbeat` agregado al
+`CMD` de `deploy/Dockerfile.celery-worker`. Rebuild + recreate → worker arranca
+limpio y estable (`celery@... ready.`, conectado a RabbitMQ, sin restarts).
+
+**Consecuencia real detectada por `suit-backend`:** el cobro real que corrió
+mientras el worker seguía en crash-loop (`pago_id 06a90fa3-dae4-7163-8000-03195a6f83c4`,
+`event_id 06a90fa3-ed05-7d59-8000-21ece2e83043`) quedó con su `EventoOutbox`
+marcado `enviado` (el publisher confirm del broker fue exitoso) pero
+probablemente **nunca llegó a ninguna cola**, porque el worker nunca estuvo
+arriba para declararla. Se le pidió a `suit-backend` reprocesar/republicar ese
+evento puntual ahora que el worker está sano.
+
+**Gap de diseño anotado, no corregido en este pase** (propuesto por
+`suit-backend`): el publisher del relay no usa el flag `mandatory` de AMQP, así
+que no hay forma de detectar un mensaje no enrutado — un `EventoOutbox` puede
+quedar "enviado" sin que ningún consumidor lo haya recibido. Queda para una
+decisión de diseño futura, no es parte de este fix puntual.
+
+**Segundo quirk de BDV QA documentado** (encontrado por `suit-backend` en la
+misma prueba): además del monto literal (`"1000.6"`, ver Bloque #8), el campo
+`concept` también matchea literal contra el ejemplo del PDF (`"Pago"`) —
+cualquier otro texto dispara el mismo código no documentado `1001`.
 
 ---
 

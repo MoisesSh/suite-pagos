@@ -23,4 +23,11 @@ FROM deps AS runner
 
 COPY suit-conciliacion/ .
 
-CMD ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=4"]
+# --without-gossip/--without-mingle/--without-heartbeat: RabbitMQ 4.x rechaza
+# las colas transitorias exclusivas que gossip/mingle declaran para
+# coordinacion entre workers (error 541 transient_nonexcl_queues, mismo
+# problema que ya se resolvio para el pidbox via
+# CELERY_WORKER_ENABLE_REMOTE_CONTROL=False en settings.py, pero esa variable
+# no cubre gossip/mingle). Sin esto el worker crashea en loop y nunca llega a
+# consumir nada ni a registrarse en Flower.
+CMD ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=4", "--without-gossip", "--without-mingle", "--without-heartbeat"]

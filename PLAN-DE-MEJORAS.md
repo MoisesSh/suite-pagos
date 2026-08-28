@@ -135,6 +135,33 @@ navegador (checkout_token vence a los 15 min).
 
 ---
 
+## Bloque #13 — Fix: Swagger de Conciliación bloqueado por iframe en el Portal ✅ COMPLETADO
+
+**Reportado por:** usuario (probando el Developer Portal real) · **Resuelto por:** `suit-conciliacion`
+
+**Bug:** la página "Documentación" de `suit-portal` embebe por iframe el Swagger
+de `suit-conciliacion` (`/api/docs/`), pero `X-Frame-Options: DENY` (default
+del middleware de clickjacking de Django) lo bloqueaba — mismo tipo de
+protección que el propio proyecto usa a propósito en otros lados, pero acá
+nadie la había exceptuado para esta vista.
+
+**Fix:** `xframe_options_exempt` + `Content-Security-Policy: frame-ancestors
+'self' {PORTAL_ORIGIN}` aplicado únicamente a `/api/schema/` y `/api/docs/`
+(mismo patrón que el formulario de cobro del Orquestador) — resto del proyecto
+sigue en `DENY` por default, sin excepción global. `PORTAL_ORIGIN` vía env
+(`http://localhost:3001` en dev), agregado a `deploy/docker-compose.yml`.
+
+**Verificado en 3 niveles:** unit test aislado de la función (headers
+correctos), servidor de desarrollo local, y el stack Docker real donde se
+reportó el bug (`curl -I http://localhost:8002/api/docs/` confirma el CSP
+correcto, sin `X-Frame-Options`). 41/41 tests. Nota técnica: un test de
+integración real contra `/api/docs/` vía `manage.py test` es inviable porque
+esas rutas solo se registran `if settings.DEBUG`, y `manage.py test` fuerza
+`DEBUG=False` — se optó por testear la función en aislamiento + verificación
+manual real, en vez de un test frágil.
+
+---
+
 ## `suit-orquestador`
 
 ### Bloque #1 — Modelos base del Orquestador ✅ COMPLETADO

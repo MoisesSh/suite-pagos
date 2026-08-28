@@ -23,6 +23,7 @@ const NAV_LINKS = [
   { href: "/", label: "Inicio" },
   { href: "/documentacion", label: "Documentación" },
   { href: "/aplicaciones/nueva", label: "Registrar aplicación" },
+  { href: "/probar-iframe", label: "Probar iframe de pago" },
 ] as const;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

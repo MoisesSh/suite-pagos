@@ -9,6 +9,9 @@ staticfiles/
 .env
 .env.local
 
+# Backups de bases de datos (contienen datos y hashes de password, nunca a git)
+backups/
+
 # Node / Next.js
 node_modules/
 .next/

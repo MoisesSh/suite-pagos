@@ -2,10 +2,10 @@ import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { cookies } from "next/headers";
 import { API } from "@/shared/commons/api";
+import { extractSetCookieValue } from "@/shared/infrastructure/http/parse-set-cookie";
 
 interface LoginResponse {
   access: string;
-  refresh: string;
   usuario: {
     id: string;
     email: string;
@@ -35,8 +35,10 @@ export default {
 
         const data = (await res.json()) as LoginResponse;
 
+        const refreshToken = extractSetCookieValue(res, REFRESH_COOKIE_NAME);
+        if (!refreshToken) return null;
         const cookieStore = await cookies();
-        cookieStore.set(REFRESH_COOKIE_NAME, data.refresh, {
+        cookieStore.set(REFRESH_COOKIE_NAME, refreshToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",

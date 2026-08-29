@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import authConfig, { REFRESH_COOKIE_NAME } from "./auth.config";
 import { API } from "@/shared/commons/api";
 import { decodeJwtExpiry } from "@/shared/infrastructure/http/jwt";
+import { extractSetCookieValue } from "@/shared/infrastructure/http/parse-set-cookie";
 
 async function refreshAccessToken(token: JWT): Promise<JWT> {
   try {
@@ -17,11 +18,13 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
     });
     if (!res.ok) throw new Error("El backend rechazo el refresh");
 
-    // El backend rota el refresh token en cada llamada (lo devuelve en el body
-    // ademas de re-setearlo via Set-Cookie): hay que persistir el nuevo valor
-    // o el siguiente refresh fallara por token ya invalidado.
-    const data = (await res.json()) as { access: string; refresh: string };
-    cookieStore.set(REFRESH_COOKIE_NAME, data.refresh, {
+    // El backend rota el refresh token en cada llamada y lo re-setea via
+    // Set-Cookie: hay que persistir el nuevo valor o el siguiente refresh
+    // fallara por token ya invalidado.
+    const data = (await res.json()) as { access: string };
+    const newRefreshToken = extractSetCookieValue(res, REFRESH_COOKIE_NAME);
+    if (!newRefreshToken) throw new Error("El backend no reseteo el refresh_token");
+    cookieStore.set(REFRESH_COOKIE_NAME, newRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

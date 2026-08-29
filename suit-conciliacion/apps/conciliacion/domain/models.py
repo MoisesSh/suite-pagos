@@ -1,5 +1,7 @@
 from django.db import models
+from fernet_fields import EncryptedCharField
 
+from apps.shared.domain.fields import EncryptedJSONField
 from apps.shared.domain.models import BaseModel
 from apps.users.domain.models import Usuario
 
@@ -47,7 +49,9 @@ class EventoPagoRecibido(BaseModel):
 
     event_id = models.UUIDField(unique=True)
     event_type = models.CharField(max_length=100)
-    payload = models.JSONField()
+    # Cifrado (Bloque #16): el payload de `pago.confirmado` trae en claro
+    # cedula_pagador/telefono_pagador (ver contrato-evento-pago-confirmado.md).
+    payload = EncryptedJSONField()
     schema_version = models.PositiveSmallIntegerField()
     procesado_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
@@ -79,8 +83,11 @@ class ConsultaConciliacionProveedor(BaseModel):
         Banco, on_delete=models.PROTECT, related_name='consultas_conciliacion',
     )
     referencia_corta = models.CharField(max_length=20, db_index=True)
-    telefono_pagador = models.CharField(max_length=20)
-    cedula_pagador = models.CharField(max_length=20, blank=True)
+    # Cifrados (Bloque #16, auditoría de seguridad): nunca se filtran por
+    # igualdad exacta en ningún service (referencia_corta ya cubre el
+    # matching) — EncryptedField no permite db_index/unique de todos modos.
+    telefono_pagador = EncryptedCharField(max_length=20)
+    cedula_pagador = EncryptedCharField(max_length=20, blank=True)
     cedula_confiable = models.BooleanField(default=False)
     importe_esperado = models.DecimalField(max_digits=19, decimal_places=2)
     # DateField (no DateTimeField): el contrato de `pago.confirmado` y el
@@ -90,7 +97,7 @@ class ConsultaConciliacionProveedor(BaseModel):
     codigo_respuesta_raw = models.CharField(max_length=20)
     mensaje_respuesta_raw = models.TextField(blank=True)
     resultado_interpretado = models.CharField(max_length=30, choices=ResultadoInterpretado.choices)
-    payload_crudo = models.JSONField()
+    payload_crudo = EncryptedJSONField()  # cifrado (Bloque #16): respuesta cruda íntegra del proveedor
 
     class Meta:
         verbose_name = 'Consulta de conciliación al proveedor'

@@ -17,13 +17,21 @@ environ.Env.read_env(BASE_DIR / '.env')
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-qby3%!tvi4lj#ig2@%h3!pu+ba6b2in1h=u#mohr*$xvf$=g%a')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool('DEBUG', default=True)
+# Default False (auditoría de seguridad, Bloque #16 PLAN-DE-MEJORAS.md): un
+# default inseguro acá era la causa raíz del fail-open de CORS de abajo —
+# cualquier entorno que necesite DEBUG=True (dev/staging) debe pedirlo
+# explícito por env, nunca asumirlo por omisión.
+DEBUG = env.bool('DEBUG', default=False)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
+# CORS_ALLOWED_ORIGINS es obligatorio y explícito, independiente de DEBUG —
+# antes se abría CORS_ALLOW_ALL_ORIGINS automáticamente si DEBUG=True y esta
+# lista estaba vacía (fail-open doble: DEBUG inseguro → CORS abierto
+# inseguro, con CORS_ALLOW_CREDENTIALS=True reflejando el origen del
+# atacante). Sin origins configurados, CORS simplemente no habilita ningún
+# origen — ninguna app de navegador puede llamar a esta API con cookies.
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
-if DEBUG and not CORS_ALLOWED_ORIGINS:
-    CORS_ALLOW_ALL_ORIGINS = True  # solo en desarrollo sin configurar
 CORS_ALLOW_CREDENTIALS = True  # el refresh token viaja en cookie HttpOnly
 
 # Origen fijo del Developer Portal (suit-portal), permitido a embeber
@@ -32,6 +40,18 @@ CORS_ALLOW_CREDENTIALS = True  # el refresh token viaja en cookie HttpOnly
 # del Orquestador) — alcanza con un origen fijo por env var, sin catálogo
 # dinámico de dominios ni token firmado.
 PORTAL_ORIGIN = env('PORTAL_ORIGIN', default='http://localhost:3001')
+
+# Cifrado de campos sensibles (django-fernet-fields-v2) — cédula/teléfono del
+# pagador y respuestas crudas del proveedor (auditoría de seguridad, Bloque
+# #16). Clave propia, NUNCA la misma que SECRET_KEY (esta cifra datos en
+# reposo, SECRET_KEY firma tokens/sesiones — mezclar ambos usos es
+# exactamente lo que la separación de claves busca evitar). Lista (no un
+# único valor): la primera clave cifra, todas se intentan al descifrar —
+# permite rotar sin invalidar filas ya cifradas con la clave anterior.
+# El default es una clave de desarrollo fija (no aleatoria en cada arranque:
+# una clave nueva por proceso volvería indescifrable cualquier dato ya
+# guardado) — producción DEBE fijar FERNET_KEYS por env, nunca usar este default.
+FERNET_KEYS = env.list('FERNET_KEYS', default=['_0hH3FXmX6MHOcOJdUG-YxwiluUtQ_goo1UYVl822DQ='])
 
 
 # Application definition
@@ -87,9 +107,19 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # Postgres propia (database-per-service) — sin FK cruzada con el Orquestador.
+# Sin fallback a sqlite: un default silencioso acá fue la causa real de que
+# un smoke test corriera contra una base distinta a la de Docker sin que
+# nadie lo notara (Bloque #16, auditoría de seguridad). Fail-fast explícito
+# en vez de dejar que Django recién falle más adelante con un error críptico
+# de conexión.
+if not env('DATABASE_URL', default=None):
+    raise RuntimeError(
+        'DATABASE_URL es obligatoria — sin fallback a sqlite. Configurala en '
+        '.env o en el entorno (Postgres real, database-per-service).',
+    )
 
 DATABASES = {
-    'default': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR / "db.sqlite3"}'),
+    'default': env.db('DATABASE_URL'),
 }
 
 AUTH_USER_MODEL = 'users.Usuario'

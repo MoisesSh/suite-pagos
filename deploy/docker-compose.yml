@@ -107,6 +107,13 @@ services:
       # Origen del Developer Portal (suit-portal) autorizado a embeber
       # /api/docs/ y /api/schema/ por iframe — ver config/urls.py.
       PORTAL_ORIGIN: ${PORTAL_ORIGIN:-http://localhost:3001}
+      # Auditoría de seguridad (Bloque #16): DEBUG ahora es False por default
+      # en el código — este stack de dev/staging lo pide explícito para
+      # mantener /api/docs/ expuesto. CORS_ALLOWED_ORIGINS ya no se activa
+      # solo (fail-open eliminado) — se declara explícito para los dos
+      # consumidores de navegador conocidos hoy (frontend + portal).
+      DEBUG: ${DEBUG:-True}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
     ports:
       - "8002:8000"
 

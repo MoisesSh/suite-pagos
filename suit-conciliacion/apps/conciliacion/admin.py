@@ -36,7 +36,15 @@ class EventoPagoRecibidoAdmin(admin.ModelAdmin):
 class ConsultaConciliacionProveedorAdmin(admin.ModelAdmin):
     list_display = ['referencia_corta', 'banco', 'resultado_interpretado', 'fecha_pago']
     list_filter = ['resultado_interpretado', 'banco']
-    search_fields = ['referencia_corta', 'telefono_pagador']
+    # telefono_pagador ya no es buscable (Bloque #16, auditoría de seguridad):
+    # está cifrado (EncryptedCharField/BinaryField a nivel de columna), un
+    # LIKE/icontains sobre eso no matchea nada — referencia_corta ya es la
+    # clave real de búsqueda/matching.
+    search_fields = ['referencia_corta']
+    # payload_crudo es staging/auditoría de solo lectura (nunca se edita a
+    # mano, ver db-plan-pagos.md §3.2b) — readonly también evita mostrarlo
+    # en un <textarea> editable en el detalle.
+    readonly_fields = ['payload_crudo']
 
 
 @admin.register(MovimientoBancario)

@@ -27,6 +27,16 @@ export const apiClient = {
     return parseResponse<T>(res);
   },
 
+  /** Como `get`, pero devuelve `null` en 404 en vez de lanzar. */
+  async getOrNull<T>(path: string): Promise<T | null> {
+    const res = await fetch(`${API.conciliacionUrl}${path}`, {
+      headers: await authHeader(),
+      cache: "no-store",
+    });
+    if (res.status === 404) return null;
+    return parseResponse<T>(res);
+  },
+
   async patch<T>(path: string, body?: object): Promise<T> {
     const res = await fetch(`${API.conciliacionUrl}${path}`, {
       method: "PATCH",

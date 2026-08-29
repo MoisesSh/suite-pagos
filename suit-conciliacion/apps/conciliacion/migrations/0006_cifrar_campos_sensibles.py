@@ -1,7 +1,6 @@
 from django.db import migrations
-from fernet_fields import EncryptedCharField
 
-from apps.shared.domain.fields import EncryptedJSONField
+from apps.shared.domain.fields import EncryptedCharField, EncryptedJSONField
 
 # Auditoría de seguridad (Bloque #16, PLAN-DE-MEJORAS.md): cedula_pagador,
 # telefono_pagador y payload_crudo/payload viajaban en texto plano en la DB
@@ -10,8 +9,17 @@ from apps.shared.domain.fields import EncryptedJSONField
 # cifradas, hacer backfill vía RunPython (pasa por el ORM => cifra al
 # guardar), recién ahí borrar las columnas viejas en claro y renombrar —
 # nunca un AlterField directo de CharField/JSONField a un campo cifrado, que
-# en Postgres intentaría un ALTER COLUMN TYPE bytea sin pasar los datos
-# existentes por Fernet (quedarían corruptos, no cifrados).
+# en Postgres castearía el valor existente a texto plano sin pasarlo por
+# Fernet (quedaría corrupto, no cifrado — encontrado en real, ver commit
+# cb38141 y el aviso de suit-backend sobre el mismo riesgo en su lado).
+#
+# Campo cifrado: EncryptedCharField/EncryptedJSONField de
+# apps/shared/domain/fields.py (TextField + MultiFernet, mismo mecanismo y
+# setting FIELD_ENCRYPTION_KEYS que suit-orquestador) — reemplaza la primera
+# versión de este archivo (django-fernet-fields-v2, BinaryField), que
+# funcionaba en sqlite pero corrompía JSON en Postgres real (el wrapper
+# psycopg.types.json.Jsonb(...) de JSONField.get_db_prep_save() se cifraba
+# vía su __repr__ truncado, no el JSON completo).
 
 
 def _backfill(apps, schema_editor):
@@ -51,12 +59,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='consultaconciliacionproveedor',
             name='telefono_pagador_tmp',
-            field=EncryptedCharField(max_length=20, null=True),
+            field=EncryptedCharField(null=True),
         ),
         migrations.AddField(
             model_name='consultaconciliacionproveedor',
             name='cedula_pagador_tmp',
-            field=EncryptedCharField(max_length=20, null=True, blank=True),
+            field=EncryptedCharField(null=True, blank=True),
         ),
         migrations.AddField(
             model_name='consultaconciliacionproveedor',
@@ -86,12 +94,12 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='consultaconciliacionproveedor',
             name='telefono_pagador',
-            field=EncryptedCharField(max_length=20),
+            field=EncryptedCharField(),
         ),
         migrations.AlterField(
             model_name='consultaconciliacionproveedor',
             name='cedula_pagador',
-            field=EncryptedCharField(max_length=20, blank=True),
+            field=EncryptedCharField(blank=True),
         ),
         migrations.AlterField(
             model_name='consultaconciliacionproveedor',

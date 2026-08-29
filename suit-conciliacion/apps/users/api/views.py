@@ -39,10 +39,13 @@ class LoginView(views.APIView):
             return Response({'error': 'Credenciales inválidas.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(usuario)
+        # `refresh` NUNCA en el body (auditoría de seguridad, Bloque #16):
+        # solo viaja en la cookie HttpOnly — devolverlo también en el JSON
+        # anula esa protección a nivel de contrato de API para cualquier
+        # consumidor futuro (XSS que lea la respuesta ya tiene el refresh).
         response = Response(
             {
                 'access': str(refresh.access_token),
-                'refresh': str(refresh),
                 'usuario': UsuarioSerializer(usuario).data,
             },
         )
@@ -65,8 +68,10 @@ class CookieTokenRefreshView(TokenRefreshView):
         except TokenError:
             return Response({'error': 'Refresh token inválido o expirado.'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        nuevo_refresh = serializer.validated_data.pop('refresh', None)
+        # Igual que en LoginView: el refresh rotado va solo a la cookie, nunca
+        # de vuelta en el body (serializer.validated_data ya sin 'refresh').
         response = Response(serializer.validated_data)
-        nuevo_refresh = serializer.validated_data.get('refresh')
         if nuevo_refresh:
             set_refresh_cookie(response, nuevo_refresh)
         return response

@@ -1,4 +1,3 @@
-import unittest
 from decimal import Decimal
 
 from django.db import connection
@@ -8,19 +7,16 @@ from django.utils import timezone
 from apps.conciliacion.domain.models import ConsultaConciliacionProveedor
 from apps.shared.tests import factories
 
+# Nota histórica: la primera versión de este campo (django-fernet-fields-v2,
+# BinaryField compuesto con JSONField) funcionaba en sqlite pero corrompía
+# datos en Postgres real — JSONField.get_db_prep_save() ahí devuelve un
+# wrapper psycopg.types.json.Jsonb(...), no un string, y se cifraba su
+# __repr__ truncado en vez del JSON completo. El campo actual
+# (apps/shared/domain/fields.py, TextField + MultiFernet, serialización JSON
+# explícita) no depende de ningún adaptador de backend, así que este test ya
+# no necesita restringirse a Postgres — corre igual en sqlite.
 
-@unittest.skipUnless(
-    connection.vendor == 'postgresql',
-    'Este bug es específico del adaptador JSON de Postgres (psycopg envuelve '
-    'JSONField.get_db_prep_save() en un objeto Jsonb(...), no un string — '
-    'sqlite sí devuelve un string plano ahí, así que esconde el bug por '
-    'completo). Encontrado en real: la primera versión de EncryptedJSONField '
-    'pasaba ese wrapper por `force_bytes()`, que cae en `str(objeto)` — el '
-    '__repr__ de Jsonb trunca el contenido a un preview corto para debug '
-    '("Jsonb({...} ... (N chars))"), y ESO quedaba cifrado en vez del JSON '
-    'real. Corrompió 2 filas reales en Docker antes de detectarse (sin '
-    'recuperación posible — el preview es una vista truncada, no el dato).',
-)
+
 class CifradoCamposSensiblesTests(TestCase):
     def test_payload_de_evento_pago_recibido_redondea_exacto_y_no_queda_en_claro(self):
         payload_original = {
@@ -37,9 +33,9 @@ class CifradoCamposSensiblesTests(TestCase):
             cursor.execute(
                 'SELECT payload FROM conciliacion_eventopagorecibido WHERE id = %s', [str(evento.id)],
             )
-            crudo = bytes(cursor.fetchone()[0])
-        self.assertNotIn(b'V12345678', crudo)
-        self.assertNotIn(b'04120000000', crudo)
+            crudo = cursor.fetchone()[0]
+        self.assertNotIn('V12345678', crudo)
+        self.assertNotIn('04120000000', crudo)
 
     def test_consulta_conciliacion_redondea_exacto_y_no_queda_en_claro(self):
         evento = factories.crear_evento_pago()
@@ -65,7 +61,7 @@ class CifradoCamposSensiblesTests(TestCase):
                 'FROM conciliacion_consultaconciliacionproveedor WHERE id = %s',
                 [str(consulta.id)],
             )
-            telefono_crudo, cedula_crudo, payload_crudo_crudo = (bytes(v) for v in cursor.fetchone())
-        self.assertNotIn(b'04127141363', telefono_crudo)
-        self.assertNotIn(b'V27037606', cedula_crudo)
-        self.assertNotIn(b'Transacci', payload_crudo_crudo)
+            telefono_crudo, cedula_crudo, payload_crudo_crudo = cursor.fetchone()
+        self.assertNotIn('04127141363', telefono_crudo)
+        self.assertNotIn('V27037606', cedula_crudo)
+        self.assertNotIn('Transacci', payload_crudo_crudo)

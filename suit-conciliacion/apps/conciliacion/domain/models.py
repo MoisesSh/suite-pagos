@@ -1,7 +1,6 @@
 from django.db import models
-from fernet_fields import EncryptedCharField
 
-from apps.shared.domain.fields import EncryptedJSONField
+from apps.shared.domain.fields import EncryptedCharField, EncryptedJSONField
 from apps.shared.domain.models import BaseModel
 from apps.users.domain.models import Usuario
 
@@ -86,8 +85,10 @@ class ConsultaConciliacionProveedor(BaseModel):
     # Cifrados (Bloque #16, auditoría de seguridad): nunca se filtran por
     # igualdad exacta en ningún service (referencia_corta ya cubre el
     # matching) — EncryptedField no permite db_index/unique de todos modos.
-    telefono_pagador = EncryptedCharField(max_length=20)
-    cedula_pagador = EncryptedCharField(max_length=20, blank=True)
+    # Sin max_length: storage es TextField (el ciphertext es más largo que
+    # el texto original), ver apps/shared/domain/fields.py.
+    telefono_pagador = EncryptedCharField()
+    cedula_pagador = EncryptedCharField(blank=True)
     cedula_confiable = models.BooleanField(default=False)
     importe_esperado = models.DecimalField(max_digits=19, decimal_places=2)
     # DateField (no DateTimeField): el contrato de `pago.confirmado` y el

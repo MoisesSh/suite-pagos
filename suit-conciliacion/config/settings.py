@@ -41,17 +41,24 @@ CORS_ALLOW_CREDENTIALS = True  # el refresh token viaja en cookie HttpOnly
 # dinámico de dominios ni token firmado.
 PORTAL_ORIGIN = env('PORTAL_ORIGIN', default='http://localhost:3001')
 
-# Cifrado de campos sensibles (django-fernet-fields-v2) — cédula/teléfono del
-# pagador y respuestas crudas del proveedor (auditoría de seguridad, Bloque
-# #16). Clave propia, NUNCA la misma que SECRET_KEY (esta cifra datos en
-# reposo, SECRET_KEY firma tokens/sesiones — mezclar ambos usos es
-# exactamente lo que la separación de claves busca evitar). Lista (no un
-# único valor): la primera clave cifra, todas se intentan al descifrar —
-# permite rotar sin invalidar filas ya cifradas con la clave anterior.
-# El default es una clave de desarrollo fija (no aleatoria en cada arranque:
-# una clave nueva por proceso volvería indescifrable cualquier dato ya
-# guardado) — producción DEBE fijar FERNET_KEYS por env, nunca usar este default.
-FERNET_KEYS = env.list('FERNET_KEYS', default=['_0hH3FXmX6MHOcOJdUG-YxwiluUtQ_goo1UYVl822DQ='])
+# Cifrado de campos sensibles (apps/shared/domain/fields.py, campo custom
+# TextField+MultiFernet — mismo mecanismo y mismo nombre de setting que
+# suit-orquestador, coordinado para converger en un solo criterio) —
+# cédula/teléfono del pagador y respuestas crudas del proveedor (auditoría
+# de seguridad, Bloque #16). Clave propia, NUNCA la misma que SECRET_KEY
+# (esta cifra datos en reposo, SECRET_KEY firma tokens/sesiones — mezclar
+# ambos usos es exactamente lo que la separación de claves busca evitar).
+# String coma-separado (no una única clave): la PRIMERA cifra en escritura,
+# TODAS se prueban al descifrar (MultiFernet) — permite rotar agregando una
+# clave nueva al principio sin invalidar filas ya cifradas con la anterior.
+# Obligatoria, sin default (mismo criterio que DATABASE_URL): una clave de
+# cifrado no debe tener un valor "de desarrollo" implícito que nadie note.
+if not env('FIELD_ENCRYPTION_KEYS', default=None):
+    raise RuntimeError(
+        'FIELD_ENCRYPTION_KEYS es obligatoria — sin default. Generar con '
+        "cryptography.fernet.Fernet.generate_key() y configurar en .env.",
+    )
+FIELD_ENCRYPTION_KEYS = env('FIELD_ENCRYPTION_KEYS')
 
 
 # Application definition

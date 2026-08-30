@@ -17,6 +17,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/eventos" className="text-foreground hover:text-primary">
             Eventos
           </Link>
+          {session.user.isStaff && (
+            <Link href="/aplicaciones" className="text-foreground hover:text-primary">
+              Aplicaciones
+            </Link>
+          )}
         </nav>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">{session.user.email}</span>

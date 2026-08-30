@@ -116,10 +116,92 @@ window.addEventListener('message', function (evento) {
 
 El Orquestador solo manda el `postMessage` a tu origen exacto, **nunca** con
 `targetOrigin: '*'` — si por alguna razón no pudo determinar tu origen (Origin
-y Referer ausentes en la petición del iframe), simplemente no manda nada; en
-ese caso tu app debería tener un mecanismo alternativo de confirmación (ej.
-consultar el estado del `pago_id` por tu cuenta, o un webhook — no existe
-todavía, evaluar si hace falta según el volumen real de este caso).
+y Referer ausentes en la petición del iframe), simplemente no manda nada.
+
+**El `postMessage` es UX, no tu fuente de verdad.** Si el navegador del
+pagador se cierra, pierde la conexión, o el mensaje no llega por cualquier
+motivo, tu app nunca se entera por esta vía. La confirmación real y
+autoritativa es el **webhook server-to-server** (ver sección siguiente) —
+usá el `postMessage` solo para redirigir/actualizar la pantalla más rápido
+mientras el pagador sigue ahí, nunca como único mecanismo para decidir si el
+pago se completó.
+
+## Webhook server-to-server (fuente de verdad primaria)
+
+Igual que Stripe, Mercado Pago, PayPal, Culqi y dLocal, el Orquestador te
+notifica el resultado del cobro directo a tu servidor — sin depender de que
+el navegador del pagador siga abierto.
+
+### Configurarlo
+
+Seteá `webhook_url` al registrar o editar tu aplicación (misma API admin del
+registro — `PATCH /api/autorizacion/admin/aplicaciones/<id>/` con
+`{"webhook_url": "https://tu-servidor.gob.ve/webhooks/suit-pagos"}`). Al
+setearla por primera vez, el Orquestador genera automáticamente un
+`webhook_secret` — **nunca lo mandes vos ni lo elijas a mano**, es la clave
+HMAC con la que se firma cada entrega. El endpoint de admin te lo devuelve en
+la respuesta (`GET`/`POST` a `/admin/aplicaciones/`) — guardalo de forma
+segura, es equivalente al "signing secret" del dashboard de Stripe.
+
+### Qué vas a recibir
+
+```
+POST https://tu-servidor.gob.ve/webhooks/suit-pagos
+Content-Type: application/json
+X-Suit-Signature: sha256=<hmac_sha256_hex>
+
+{"event_id": "...", "event_type": "pago.confirmado", "schema_version": 1, "payload": {...}}
+```
+
+Mismo `payload` documentado en `investigaciones/contrato-evento-pago-confirmado.md`
+(el mismo evento que el Orquestador publica a RabbitMQ para Conciliación) —
+`pago_id`, `monto`, `moneda_codigo`, `referencia_corta`, `estado`, etc.
+
+### Validar la firma (obligatorio antes de confiar en el payload)
+
+La firma es HMAC-SHA256 sobre el **body exacto recibido** (los bytes crudos,
+no un JSON re-serializado) con tu `webhook_secret`:
+
+```python
+import hashlib
+import hmac
+
+def validar_firma(cuerpo_crudo: bytes, header_signature: str, webhook_secret: str) -> bool:
+    firma_esperada = 'sha256=' + hmac.new(
+        webhook_secret.encode('utf-8'), cuerpo_crudo, hashlib.sha256,
+    ).hexdigest()
+    # compare_digest, nunca `==` — evita timing attacks al comparar la firma.
+    return hmac.compare_digest(header_signature, firma_esperada)
+```
+
+```javascript
+const crypto = require('crypto');
+
+function validarFirma(cuerpoCrudo, headerSignature, webhookSecret) {
+  const firmaEsperada = 'sha256=' + crypto
+    .createHmac('sha256', webhookSecret)
+    .update(cuerpoCrudo)
+    .digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(headerSignature), Buffer.from(firmaEsperada));
+}
+```
+
+**Importante:** leé el body como bytes crudos antes de parsearlo a JSON (en
+Express, por ejemplo, necesitás el body sin parsear — `express.raw()` para
+esta ruta específica, no `express.json()` — para poder recalcular la firma
+sobre los bytes exactos).
+
+Respondé **2xx** apenas hayas validado la firma y encolado tu propio
+procesamiento — no hagas trabajo pesado sincrónico antes de responder, el
+Orquestador reintenta con backoff fijo (cada pocos segundos) si no recibís
+2xx, hasta un tope configurable de intentos, y después deja de reintentar
+(`agotado`) sin otro aviso más que ese estado interno nuestro.
+
+### Idempotencia de tu lado
+
+El mismo `event_id` puede llegarte más de una vez (entrega *at-least-once*,
+igual que el resto del sistema) — dedupealo por `event_id` antes de procesar,
+no asumas que un webhook se entrega exactamente una vez.
 
 ## Errores y códigos de respuesta del proveedor
 

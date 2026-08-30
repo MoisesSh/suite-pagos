@@ -170,6 +170,13 @@ services:
       dockerfile: deploy/Dockerfile.frontend
       args:
         SERVICE_DIR: suit-portal
+        # NEXT_PUBLIC_* deben pasarse como build arg (no alcanza con
+        # `environment:` en runtime) — Next.js los inlinea en el bundle del
+        # cliente durante `npm run build`, y el .env real esta excluido del
+        # build context (.dockerignore). Mantener sincronizado con
+        # suit-portal/.env.
+        NEXT_PUBLIC_CONCILIACION_DOCS_URL: http://localhost:8002/api/docs/
+        NEXT_PUBLIC_ORQUESTADOR_PUBLIC_URL: http://localhost:8001
       target: runner
     restart: unless-stopped
     depends_on:

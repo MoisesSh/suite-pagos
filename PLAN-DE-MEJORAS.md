@@ -5,7 +5,74 @@
 > antes de recibir la orden de ejecución del coordinador. Se agrega un bloque nuevo
 > cada vez que un agente propone el siguiente incremento de trabajo.
 
-Última actualización: 2026-08-28 03:10
+Última actualización: 2026-08-29
+
+---
+
+## Bloque #18 — Fix: 2 bugs reales de infraestructura encontrados al probar el Developer Portal ✅ COMPLETADO (coordinador)
+
+**Reportado por:** usuario (probando el Developer Portal real, iframe de Swagger roto y botón de documentación muerto).
+
+**Bug 1 — `NEXT_PUBLIC_*` de `suit-portal` horneadas con el valor por defecto equivocado.** Next.js inlinea las variables `NEXT_PUBLIC_*` en el bundle del cliente durante `npm run build`, no en runtime — pero `deploy/Dockerfile.frontend` copiaba el código y corría el build sin pasar esas variables como build arg, y el `.env` real está excluido a propósito del build context (`.dockerignore` raíz). Resultado: el bundle quedó con el default hardcodeado en el código (`http://localhost:8000/api/docs/`), no el real (`:8002`) — el iframe y el link de "Abrir en una pestaña nueva" apuntaban a un puerto sin nada escuchando. Fix: `NEXT_PUBLIC_CONCILIACION_DOCS_URL`/`NEXT_PUBLIC_ORQUESTADOR_PUBLIC_URL` agregadas como `ARG`+`ENV` en el Dockerfile antes del build, y como `build.args` en el servicio `suit-portal` de `docker-compose.yml`. Verificado: el bundle reconstruido ya tiene `localhost:8002` horneado.
+
+**Bug 2 — Docker Compose interpola `$VAR` dentro de los valores de `env_file`, corrompiendo secretos generados con `$`.** Los `SECRET_KEY` recién rotados de `suit-orquestador` y `suit-conciliacion` (Bloques #15/#16) contenían el carácter `$` seguido de letras (ej. `...387ibp$fioe+tp6x4u...`) — Compose lo interpretó como una referencia a una variable de entorno inexistente y la reemplazó silenciosamente por string vacío, sin error visible más que un warning fácil de pasar por alto (`The "fioe" variable is not set`). El `SECRET_KEY` real corriendo en Docker no coincidía con el `.env` en disco. Fix: ambas claves regeneradas sin `$`. **Regla nueva para todos los agentes:** ningún secreto generado para un `.env` debe contener `$` — usar un alfabeto sin ese carácter.
+
+**Contenedor huérfano de nuevo** (mismo patrón del Bloque #11): al recrear `suit-orquestador` tras el build de `suit-portal`, quedó momentáneamente con `CMD [python3]` en vez del entrypoint real — resuelto con rebuild `--no-cache` + recreate explícito, mismo fix que la vez anterior.
+
+---
+
+## Bloque #15 — Remediación de seguridad, prioridad CRÍTICA (suit-orquestador) 🔄 PROPUESTO
+
+**Origen:** auditoría de seguridad del agente `research` (`investigaciones/reporte-seguridad-y-precio-iframe.md`), a pedido del usuario, en el contexto de que este proyecto es una pasarela de pagos real en producción para instituciones del estado.
+
+**Alcance — asignado a `suit-backend`:**
+1. **`SECRET_KEY` hardcodeada y commiteada** (`config/settings.py:28`) — la misma clave firma el `checkout_token`. Cualquiera con el repo puede forjar un token válido con cualquier monto. Fix: leer de env obligatoria (fail-fast si falta), rotar la clave ya (debe tratarse como comprometida), y usar una clave de firma **independiente** para `checkout_token` (parámetro `key=` propio en `django.core.signing`, no compartir con `SECRET_KEY` de sesiones/CSRF).
+2. **`DEBUG=True` hardcodeado** (`config/settings.py:31`) — cambiar a `env.bool('DEBUG', default=False)`.
+3. **`checkout_token` sin marca de "consumido"** — un token válido se puede reutilizar dentro de los 15 min para reintentar cobros indefinidamente (el `IdempotencyKey` no lo cubre porque el cliente genera un UUID nuevo cada vez). Fix: registrar el token como consumido atómicamente en el primer `EjecutarCobroView.post` que llegue a `COMPLETADO`, rechazar cualquier uso posterior del mismo token.
+4. **Validación de `monto`/`moneda` en `ValidarAccesoRequestSerializer`**: agregar `min_value=Decimal('0.01')` y un `max_value` configurable (evitar monto negativo/cero y sin techo); validar `moneda` contra el catálogo real `Moneda.objects.filter(activo=True)` en vez de aceptar cualquier string de 3 caracteres.
+5. **Cifrado de campos sensibles en reposo**: `payload_crudo` (en `Autorizacion`/`Captura`/`Anulacion`/`Reembolso`), `EventoOutbox.payload` (contiene `cedula_pagador`/`telefono_pagador` en claro). Evaluar Fernet con rotación de clave a nivel de campo. Además, en el admin: excluir/truncar estos campos del detalle (`admin.py:146-153` no los excluye hoy).
+6. **`BDV_C2P_BASE_URL` con default apuntando al QA real del banco** (`settings.py:173-174`) — cambiar a `default=None` (mismo criterio que ya usa suit-conciliacion).
+
+**No incluido en este bloque (a evaluar aparte):** webhook server-to-server (ver Bloque #17).
+
+---
+
+## Bloque #16 — Remediación de seguridad, prioridad CRÍTICA/ALTA (suit-conciliacion) 🔄 PROPUESTO
+
+**Origen:** mismo reporte de auditoría.
+
+**Alcance — asignado a `suit-conciliacion`:**
+1. **`DEBUG` con default `True`** (`config/settings.py:20`) — cambiar default a `False`. Es la causa raíz de los puntos 2 y 3.
+2. **`CORS_ALLOW_ALL_ORIGINS` fail-open** (`settings.py:20,24-27`) — hoy se activa automáticamente si `DEBUG=True` y `CORS_ALLOWED_ORIGINS` vacío, junto con `CORS_ALLOW_CREDENTIALS=True`. Exigir `CORS_ALLOWED_ORIGINS` no vacío de forma independiente del valor de `DEBUG`.
+3. **Refresh token JWT expuesto también en el body JSON** (`apps/users/api/views.py:41-50,68-71`), además de la cookie HttpOnly — anula la protección HttpOnly a nivel de contrato. Fix: no incluir `refresh` en el body cuando ya se setea como cookie (confirmar primero con `suit-frontend` que no rompe su flujo actual, que sí lo consume del body — ver nota de coordinación abajo).
+4. **Cifrado de campos sensibles**: mismos campos que en suit-orquestador (`cedula_pagador`, `telefono_pagador`, `payload_crudo`), en `apps/conciliacion/domain/models.py:82-93,50`. Admin: `admin.py:35-39` no debería tener `telefono_pagador` en `search_fields`.
+5. **Catálogo `Banco` vacío en Docker** (hallazgo de `suit-backend`, no del research) — poblar seed con al menos `0102`/BDV, ya venía pendiente de la sesión anterior.
+
+**Nota de coordinación:** el punto 3 de este bloque (quitar `refresh` del body) puede romper a `suit-frontend` si su `authorize()` de NextAuth lo lee del body en vez de la cookie — coordinar con `suit-frontend` antes de mergear ese cambio puntual, no bloquear el resto del bloque por esto.
+
+---
+
+## Bloque #17 — Deploy: credenciales por defecto (pendiente) + Webhook server-to-server 🔄 ASIGNADO A `suit-backend`
+
+**Origen:** mismo reporte de auditoría. **Decisión del usuario sobre el webhook:** no es opcional — depender solo del `postMessage` al navegador dejaba a la app consumidora sin confirmación si el navegador del pagador se cierra antes de recibirlo. Se construye ahora.
+
+### Parte 1 — RabbitMQ/Flower con credenciales por defecto (sigue sin asignar)
+Quitar el fallback `:-guest` en `deploy/docker-compose.yml` (obligar la variable en `.env`), evaluar no publicar esos puertos en un compose de "producción" separado del de desarrollo.
+
+### Parte 2 — Webhook server-to-server, diseño cerrado
+
+**Reutiliza el patrón outbox que ya existe** (mismo `EventoOutbox`/poller Celery beat del Bloque #6), no una tabla ni mecanismo nuevo desde cero — coherente con cómo ya se resolvió la entrega confiable hacia RabbitMQ.
+
+1. **`AplicacionRegistrada`**: dos campos nuevos, ambos opcionales (una app puede seguir sin webhook si no lo necesita todavía) —
+   - `webhook_url` (URLField, configurado por staff al registrar/editar la app — mismo CRUD admin del Bloque #7, que ahora pasa a `suit-frontend` por decisión aparte del usuario).
+   - `webhook_secret` (generado automáticamente al setear `webhook_url`, nunca editable a mano — es la clave HMAC, mismo rol que el "signing secret" de Stripe).
+2. **`WebhookEntrega`** (modelo nuevo, 1:1 con cada `EventoOutbox` que tenga una `aplicacion` con `webhook_url` seteada): `evento` (FK), `intentos`, `estado` (`pendiente`/`entregado`/`agotado`), `ultimo_intento_at`, `ultima_respuesta_status`. Igual de campos a `EventoOutbox`, no un genérico reusable — evitar acoplar el mecanismo de RabbitMQ con el de HTTP.
+3. **Poller Celery beat nuevo** (mismo patrón que `OutboxRelayService`, tick fijo, `SELECT ... FOR UPDATE SKIP LOCKED`): por cada `WebhookEntrega` pendiente, `POST` el payload del evento (mismo JSON que ya viaja a RabbitMQ) al `webhook_url`, con header `X-Suit-Signature: sha256=<hmac_sha256(webhook_secret, body)>` — la app consumidora valida la firma antes de confiar en el payload (igual que Stripe/PayPal/Mercado Pago).
+4. **Reintentos con backoff fijo por tick** (mismo criterio ya usado para el relay RabbitMQ — no exponencial per-row), tope de intentos configurable (`WEBHOOK_MAX_INTENTOS`, default razonable ~10) antes de pasar a `agotado`. 2xx del consumidor = `entregado`; cualquier otra cosa (timeout, 4xx, 5xx, sin respuesta) = reintento.
+5. **Timeout corto por request** (ej. 5s) — nunca bloquear el poller esperando a un consumidor lento.
+6. Documentar en `GUIA-INTEGRACION-IFRAME.md` cómo validar la firma (ejemplo de código, mismo nivel de detalle que ya tiene el `postMessage`), y que el webhook es la fuente de verdad *primaria* — el `postMessage` queda como UX (redirigir/actualizar la pantalla más rápido), no como único mecanismo de confirmación.
+
+**No urgente / agendar sin bloquear lo anterior:** tokens DRF admin sin expiración (mitigado por permisos), inconsistencia SameSite Strict/Lax entre backend y Next.js, falta `middleware.ts` en suit-frontend como defensa en profundidad.
 
 ---
 

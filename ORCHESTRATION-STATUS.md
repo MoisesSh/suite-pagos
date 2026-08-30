@@ -90,13 +90,17 @@ separados, solo `cd <carpeta> && claude -n <nombre>` dentro del monorepo.
 
 | Agente | Handle de terminal | Carpeta | Rol |
 |---|---|---|---|
-| `research` | `term_253dc15b-1d76-4e89-ab74-c9c3e77f1d2b` | raíz | Investigación transversal |
-| `expert_database` | `term_f84dffdd-c3f0-422d-8f8c-a9f2c11fc028` | `suit-orquestador/` | Modelado de datos Orquestador |
-| `suit-backend` | `term_4aab9efe-9493-4b10-b27f-8dbb379928d8` | `suit-orquestador/` | Backend Django Orquestador |
-| `expert_database_conciliacion` | `term_4a897c08-7477-4480-9ce2-e0a7de5743a2` | `suit-conciliacion/` | Modelado de datos Conciliación |
-| `suit-conciliacion` | `term_46697366-2df2-4255-b24a-57ee4e95818a` | `suit-conciliacion/` | Backend Django Conciliación |
-| `suit-frontend` | `term_94060374-221d-440c-ad4b-218171a4a527` | `suit-frontend/` | Panel admin Next.js |
-| `suit-portal` | `term_a7f1b738-d1cf-492a-8322-c9dada14136a` | `suit-portal/` | Developer Portal Next.js |
+| `research` | `term_1060b0a4-24cb-407d-8223-d545d69d244e` | raíz | Investigación transversal |
+| `expert_database` | `term_42627a7d-d4d9-4079-8e42-4a530735979b` | `suit-orquestador/` | Modelado de datos Orquestador |
+| `suit-backend` | `term_6f43dd56-ac78-40f7-8fe6-c4f59828b916` | `suit-orquestador/` | Backend Django Orquestador |
+| `expert_database_conciliacion` | `term_1480de12-12f5-4699-81dc-971764fcd84a` | `suit-conciliacion/` | Modelado de datos Conciliación |
+| `suit-conciliacion` | `term_20793c01-2e7e-49a4-be03-a358bc9a32cf` | `suit-conciliacion/` | Backend Django Conciliación |
+| `suit-frontend` | `term_c41a0859-9d4f-4a11-9dd2-034438880159` | `suit-frontend/` | Panel admin Next.js |
+| `suit-portal` | `term_f18cbfff-1afc-4f1a-a543-c076a7f54a93` | `suit-portal/` | Developer Portal Next.js |
+
+**Nota:** `documentador` (creado ad-hoc, no está en esta tabla original) terminó
+`DOCUMENTACION-COMPLETA.md` y su terminal se cerró en el reinicio del runtime —
+no hace falta recrearlo salvo que se le pida trabajo nuevo.
 
 **Nota:** los handles anteriores (documentados en la versión previa de este
 archivo) quedaron huérfanos por un reinicio del runtime de Orca — no

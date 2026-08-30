@@ -35,6 +35,16 @@ FROM deps AS builder
 
 ARG SERVICE_DIR
 COPY ${SERVICE_DIR}/ .
+
+# Next.js "hornea" las variables NEXT_PUBLIC_* en el bundle del cliente
+# durante el build, no en runtime — el .env real está excluido a propósito
+# del build context (.dockerignore raíz), así que sin esto el bundle queda
+# con los defaults hardcodeados en el código, no los valores reales.
+ARG NEXT_PUBLIC_CONCILIACION_DOCS_URL
+ARG NEXT_PUBLIC_ORQUESTADOR_PUBLIC_URL
+ENV NEXT_PUBLIC_CONCILIACION_DOCS_URL=${NEXT_PUBLIC_CONCILIACION_DOCS_URL}
+ENV NEXT_PUBLIC_ORQUESTADOR_PUBLIC_URL=${NEXT_PUBLIC_ORQUESTADOR_PUBLIC_URL}
+
 RUN npm run build
 
 # ────────────────────────────────────────

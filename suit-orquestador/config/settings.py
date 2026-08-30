@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from decimal import Decimal
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -25,10 +26,20 @@ load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-5s!fewuq53zd@%*swfiyi7z9-iu##)yqrbkhvw$a(7zkx2ajnw'
+# Obligatoria por env, sin default — la clave hardcodeada original quedó commiteada
+# en git (comprometida por diseño) y firmaba también el checkout_token vía
+# django.core.signing sin `key=` propio. Ya rotada; ver CHECKOUT_TOKEN_SIGNING_KEY
+# más abajo para la clave de firma independiente del checkout_token.
+try:
+    SECRET_KEY = os.environ['SECRET_KEY']
+except KeyError:
+    raise RuntimeError(
+        'SECRET_KEY no está seteada. Es obligatoria por env — no hay default '
+        '(la anterior quedó hardcodeada y comprometida en git).',
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False').lower() in ('1', 'true', 'yes')
 
 # Lista separada por comas vía env (ej. "suit-orquestador,localhost") — sin esto,
 # cualquier acceso por el hostname interno de Docker devuelve 400 DisallowedHost
@@ -92,30 +103,31 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 #
 # Postgres es el motor real del Orquestador (trigger PL/pgSQL de transiciones de
-# estado, db-plan-pagos.md 2.2, y DECIMAL(19,2) para montos, sección 4). Mientras
-# no haya variables DB_* seteadas, se usa sqlite para poder migrar/probar local
-# de inmediato — la migración 0002 detecta el vendor y salta el trigger en ese
-# caso (ver esa migración para el detalle de qué deja de estar garantizado).
+# estado, db-plan-pagos.md 2.2, y DECIMAL(19,2) para montos, sección 4) — y ahora
+# OBLIGATORIO, sin fallback a sqlite. El fallback anterior permitía correr
+# migraciones/tests contra sqlite sin darse cuenta (causó que suit-frontend
+# corriera un smoke test contra sqlite local sin saberlo, con el trigger de
+# transición salteado por completo — ver migración 0002). Directiva del
+# usuario: las pruebas van siempre contra Postgres real, nunca sqlite.
+try:
+    DB_NAME = os.environ['DB_NAME']
+except KeyError:
+    raise RuntimeError(
+        'DB_NAME no está seteada. La conexión a Postgres es obligatoria — sin '
+        'fallback a sqlite (ver comentario arriba).',
+    )
 
-if os.environ.get('DB_NAME'):
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ['DB_NAME'],
-            'USER': os.environ.get('DB_USER', 'postgres'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
-            'HOST': os.environ.get('DB_HOST', 'localhost'),
-            'PORT': os.environ.get('DB_PORT', '5432'),
-            'CONN_MAX_AGE': 60,
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': DB_NAME,
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+        'CONN_MAX_AGE': 60,
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+}
 
 
 # Password validation
@@ -170,7 +182,10 @@ MAILERS = {
 # Autenticación por X-API-Key estática, sin token de sesión — ver
 # apps/autorizacion/infrastructure/adapters/bdv_c2p.py.
 
-BDV_C2P_BASE_URL = os.environ.get('BDV_C2P_BASE_URL', 'https://bdvconciliacionqa.banvenez.com:444')
+# Sin default apuntando al QA real del banco — mismo criterio que suit-conciliacion.
+# Si falta la env var, el adaptador debe fallar explícito, no caer silenciosamente
+# al ambiente QA de BDV.
+BDV_C2P_BASE_URL = os.environ.get('BDV_C2P_BASE_URL')
 BDV_C2P_API_KEY = os.environ.get('BDV_C2P_API_KEY', '')
 BDV_C2P_TIMEOUT_SEGUNDOS = int(os.environ.get('BDV_C2P_TIMEOUT_SEGUNDOS', '15'))
 
@@ -185,6 +200,32 @@ BDV_C2P_TELEFONO_COMERCIO = os.environ.get('BDV_C2P_TELEFONO_COMERCIO', '')
 # sección 3). Vigencia corta: tiempo esperado para que el usuario reciba el OTP por SMS
 # y complete el formulario, no una sesión de checkout larga.
 CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS = int(os.environ.get('CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS', '900'))
+
+# Clave de firma INDEPENDIENTE de SECRET_KEY para el checkout_token — antes
+# django.core.signing usaba SECRET_KEY por defecto (sin `key=` propio), la misma
+# que firma sesiones/CSRF de Django. Con esto, rotar una no invalida la otra, y
+# comprometer el checkout_token no compromete sesiones (ni viceversa). Obligatoria
+# por env, sin default (mismo criterio que SECRET_KEY).
+try:
+    CHECKOUT_TOKEN_SIGNING_KEY = os.environ['CHECKOUT_TOKEN_SIGNING_KEY']
+except KeyError:
+    raise RuntimeError('CHECKOUT_TOKEN_SIGNING_KEY no está seteada. Es obligatoria por env, sin default.')
+
+# Techo por transacción (ValidarAccesoRequestSerializer) — antes no existía ningún
+# límite máximo de monto. Configurable por env; default conservador en VES.
+MONTO_MAXIMO_TRANSACCION = Decimal(os.environ.get('MONTO_MAXIMO_TRANSACCION', '50000.00'))
+
+# Claves de cifrado de campo (apps/autorizacion/domain/campos_cifrados.py —
+# EncryptedJSONField, hallazgo de seguridad: payload_crudo/EventoOutbox.payload/
+# IdempotencyKey.response_snapshot traían cédula/teléfono/respuesta del banco en
+# claro). Lista coma-separada de claves Fernet (`Fernet.generate_key()`) — la
+# PRIMERA cifra en cada escritura nueva, todas se prueban al descifrar (permite
+# rotar agregando una clave nueva al principio sin invalidar filas ya cifradas
+# con la anterior). Obligatoria por env, sin default.
+try:
+    FIELD_ENCRYPTION_KEYS = os.environ['FIELD_ENCRYPTION_KEYS']
+except KeyError:
+    raise RuntimeError('FIELD_ENCRYPTION_KEYS no está seteada. Es obligatoria por env, sin default.')
 
 
 REST_FRAMEWORK = {
@@ -229,3 +270,16 @@ CELERY_WORKER_ENABLE_REMOTE_CONTROL = True
 
 OUTBOX_RELAY_LOTE_SIZE = int(os.environ.get('OUTBOX_RELAY_LOTE_SIZE', '100'))
 OUTBOX_RELAY_MAX_INTENTOS = int(os.environ.get('OUTBOX_RELAY_MAX_INTENTOS', '5'))
+
+
+# --------------------------------------------------------------------------
+# Webhook server-to-server (Bloque #17 parte 2, PLAN-DE-MEJORAS.md) — decisión
+# del usuario: no es opcional, el postMessage al navegador por sí solo deja a
+# la app consumidora sin confirmación si el navegador del pagador se cierra
+# antes de recibirlo. Mismo patrón outbox/poller Celery beat que RabbitMQ.
+# --------------------------------------------------------------------------
+
+WEBHOOK_RELAY_LOTE_SIZE = int(os.environ.get('WEBHOOK_RELAY_LOTE_SIZE', '100'))
+WEBHOOK_MAX_INTENTOS = int(os.environ.get('WEBHOOK_MAX_INTENTOS', '10'))
+# Corto a propósito: nunca bloquear el poller esperando a un consumidor lento.
+WEBHOOK_TIMEOUT_SEGUNDOS = int(os.environ.get('WEBHOOK_TIMEOUT_SEGUNDOS', '5'))

@@ -73,3 +73,31 @@ class RegistroAplicacionServiceTests(BaseAPITestCase):
         RegistroAplicacionService.activar_desactivar(aplicacion, True)
         aplicacion.refresh_from_db()
         self.assertTrue(aplicacion.activa)
+
+    def test_registrar_con_webhook_url_genera_secret_automaticamente(self):
+        aplicacion = RegistroAplicacionService.registrar(
+            nombre='Con Webhook', dominio='con-webhook.gob.ve', proveedor_codigo='BDV',
+            webhook_url='https://con-webhook.gob.ve/webhooks/pagos',
+        )
+        self.assertEqual(aplicacion.webhook_url, 'https://con-webhook.gob.ve/webhooks/pagos')
+        self.assertTrue(aplicacion.webhook_secret)
+
+    def test_registrar_sin_webhook_url_no_genera_secret(self):
+        aplicacion = RegistroAplicacionService.registrar(
+            nombre='Sin Webhook', dominio='sin-webhook.gob.ve', proveedor_codigo='BDV',
+        )
+        self.assertEqual(aplicacion.webhook_url, '')
+        self.assertEqual(aplicacion.webhook_secret, '')
+
+    def test_configurar_webhook_no_regenera_secret_si_ya_existia(self):
+        aplicacion = RegistroAplicacionService.registrar(
+            nombre='Rotacion URL', dominio='rotacion-url.gob.ve', proveedor_codigo='BDV',
+            webhook_url='https://viejo.gob.ve/hook',
+        )
+        secret_original = aplicacion.webhook_secret
+
+        RegistroAplicacionService.configurar_webhook(aplicacion, 'https://nuevo.gob.ve/hook')
+        aplicacion.refresh_from_db()
+
+        self.assertEqual(aplicacion.webhook_url, 'https://nuevo.gob.ve/hook')
+        self.assertEqual(aplicacion.webhook_secret, secret_original)

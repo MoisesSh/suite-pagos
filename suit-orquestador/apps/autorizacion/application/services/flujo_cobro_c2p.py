@@ -13,6 +13,7 @@ from apps.autorizacion.domain.models import (
     ProveedorPago,
     TipoOperacionProveedor,
     TransicionEstadoPago,
+    WebhookEntrega,
 )
 
 MEDIO_PAGO_CODIGO = 'C2P'
@@ -149,7 +150,7 @@ class FlujoCobroC2PService:
             # Outbox pattern (db-plan-pagos.md 2.3): mismo transacción que el cambio de
             # estado, nunca publicado directo a RabbitMQ desde acá — un relay separado
             # (no implementado todavía) lee EventoOutbox.estado='pendiente' y publica.
-            EventoOutbox.objects.create(
+            evento_outbox = EventoOutbox.objects.create(
                 pago=pago,
                 event_type=EVENT_TYPE_PAGO_CONFIRMADO,
                 payload=FlujoCobroC2PService._construir_payload_pago_confirmado(
@@ -157,5 +158,12 @@ class FlujoCobroC2PService:
                 ),
                 schema_version=SCHEMA_VERSION_PAGO_CONFIRMADO,
             )
+
+            # Webhook server-to-server (Bloque #17 parte 2): solo si la app tiene
+            # webhook_url configurada — no toda app lo necesita. Mismo criterio de
+            # "escribir en la misma transacción" que el outbox de RabbitMQ: un
+            # poller separado (WebhookRelayService) lee estado='pendiente' y entrega.
+            if pago.aplicacion.webhook_url:
+                WebhookEntrega.objects.create(evento=evento_outbox)
 
         return autorizacion, captura

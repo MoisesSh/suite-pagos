@@ -28,7 +28,7 @@ class RegistroAplicacionService:
 
     @staticmethod
     @transaction.atomic
-    def registrar(*, nombre, dominio, proveedor_codigo, app_origen_id=None):
+    def registrar(*, nombre, dominio, proveedor_codigo, app_origen_id=None, webhook_url=None):
         try:
             proveedor = ProveedorPago.objects.get(codigo=proveedor_codigo)
         except ProveedorPago.DoesNotExist:
@@ -41,6 +41,9 @@ class RegistroAplicacionService:
             # modelo propio — mientras tanto, se genera acá; cuando lo tenga,
             # empieza a mandarlo real sin romper este contrato.
             app_origen_id=app_origen_id or uuid.uuid4(),
+            # webhook_secret se genera solo (AplicacionRegistrada.save()) si
+            # webhook_url viene seteada acá.
+            webhook_url=webhook_url or '',
         )
 
         try:
@@ -56,4 +59,12 @@ class RegistroAplicacionService:
     def activar_desactivar(aplicacion, activa):
         aplicacion.activa = activa
         aplicacion.save(update_fields=['activa', 'updated_at'])
+        return aplicacion
+
+    @staticmethod
+    def configurar_webhook(aplicacion, webhook_url):
+        """webhook_secret nunca se acepta por parámetro — AplicacionRegistrada.save()
+        la genera sola la primera vez que webhook_url queda seteada."""
+        aplicacion.webhook_url = webhook_url
+        aplicacion.save(update_fields=['webhook_url', 'webhook_secret', 'updated_at'])
         return aplicacion

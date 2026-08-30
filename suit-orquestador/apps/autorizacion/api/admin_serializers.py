@@ -13,6 +13,10 @@ class AdminAplicacionCrearSerializer(serializers.Serializer):
         required=False, allow_null=True,
         help_text='Id de AppConsumidora en el Developer Portal. Si no se envía, el Orquestador genera uno propio.',
     )
+    webhook_url = serializers.URLField(
+        required=False, allow_blank=True, default='',
+        help_text='Opcional. webhook_secret se genera automáticamente al setearla, nunca se acepta desde acá.',
+    )
 
 
 class AdminAplicacionSerializer(serializers.Serializer):
@@ -43,10 +47,20 @@ class AdminAplicacionListItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AplicacionRegistrada
-        fields = ['id', 'nombre', 'app_origen_id', 'activa', 'created_at', 'dominios', 'proveedores_autorizados']
+        fields = [
+            'id', 'nombre', 'app_origen_id', 'activa', 'created_at', 'dominios', 'proveedores_autorizados',
+            'webhook_url', 'webhook_secret',
+        ]
+        # webhook_secret nunca se acepta desde el body (create/update) — es la
+        # clave HMAC, la genera AplicacionRegistrada.save() automáticamente al
+        # setear webhook_url. Sí es legible acá: la app consumidora necesita
+        # conocerla una vez para validar la firma de sus webhooks entrantes,
+        # mismo criterio que el "signing secret" de Stripe (visible, no editable).
+        read_only_fields = ['webhook_secret']
 
 
 class AdminAplicacionActivarSerializer(serializers.ModelSerializer):
     class Meta:
         model = AplicacionRegistrada
-        fields = ['activa']
+        fields = ['activa', 'webhook_url']
+        extra_kwargs = {'activa': {'required': False}, 'webhook_url': {'required': False}}

@@ -148,3 +148,42 @@ class ValidarAccesoViewTests(BaseAPITestCase):
             '/api/autorizacion/validar-acceso/', {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'moneda': 'VES'},
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_monto_cero_responde_400(self):
+        response = self.client.post(
+            '/api/autorizacion/validar-acceso/',
+            {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'monto': '0.00', 'moneda': 'VES'},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_monto_negativo_responde_400(self):
+        response = self.client.post(
+            '/api/autorizacion/validar-acceso/',
+            {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'monto': '-10.00', 'moneda': 'VES'},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_monto_sobre_el_techo_responde_400(self):
+        from django.conf import settings
+
+        excede = settings.MONTO_MAXIMO_TRANSACCION + 1
+        response = self.client.post(
+            '/api/autorizacion/validar-acceso/',
+            {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'monto': str(excede), 'moneda': 'VES'},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_moneda_no_existente_en_catalogo_responde_400(self):
+        response = self.client.post(
+            '/api/autorizacion/validar-acceso/',
+            {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'monto': '10.00', 'moneda': 'XXX'},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_moneda_inactiva_en_catalogo_responde_400(self):
+        # USD ya viene seedeado inactivo (migración 0003) — reservado, no habilitado.
+        response = self.client.post(
+            '/api/autorizacion/validar-acceso/',
+            {'dominio': 'conatel.gob.ve', 'proveedor': 'BDV', 'monto': '10.00', 'moneda': 'USD'},
+        )
+        self.assertEqual(response.status_code, 400)

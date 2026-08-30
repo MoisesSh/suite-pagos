@@ -16,4 +16,11 @@ app.conf.beat_schedule = {
         'task': 'apps.autorizacion.infrastructure.tasks.publicar_eventos_outbox',
         'schedule': float(os.environ.get('OUTBOX_RELAY_INTERVALO_SEGUNDOS', '5')),
     },
+    # Webhook server-to-server (Bloque #17 parte 2): poller propio, no acoplado
+    # al de RabbitMQ (semánticas de fallo distintas — confirms de broker vs.
+    # status code HTTP). Mismo criterio de intervalo configurable.
+    'entregar-webhooks': {
+        'task': 'apps.autorizacion.infrastructure.tasks.entregar_webhooks',
+        'schedule': float(os.environ.get('WEBHOOK_RELAY_INTERVALO_SEGUNDOS', '5')),
+    },
 }

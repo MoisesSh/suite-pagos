@@ -1,8 +1,11 @@
+import secrets
 from datetime import timedelta
 
 from django.db import models
 from django.utils import timezone
 from uuid_extensions import uuid7 as _uuid7
+
+from apps.autorizacion.domain.campos_cifrados import EncryptedJSONField
 
 
 def generar_uuid7():
@@ -134,10 +137,23 @@ class AplicacionRegistrada(BaseModel):
         help_text='Id lógico de AppConsumidora en el Developer Portal (sin FK real, sistema externo).',
     )
     activa = models.BooleanField(default=True, db_index=True)
+    # Webhook server-to-server (Bloque #17 parte 2) — ambos opcionales, una app
+    # puede seguir sin webhook. webhook_secret nunca se acepta desde ningún
+    # serializer/API: se genera automáticamente acá mismo, al primer momento en
+    # que webhook_url queda seteada, y no vuelve a regenerarse en updates
+    # posteriores de la URL — es la clave HMAC, mismo rol que el "signing
+    # secret" de Stripe.
+    webhook_url = models.URLField(blank=True, default='')
+    webhook_secret = models.CharField(max_length=64, blank=True, default='')
 
     class Meta:
         verbose_name = 'Aplicación registrada'
         verbose_name_plural = 'Aplicaciones registradas'
+
+    def save(self, *args, **kwargs):
+        if self.webhook_url and not self.webhook_secret:
+            self.webhook_secret = secrets.token_hex(32)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.nombre
@@ -189,7 +205,7 @@ class IdempotencyKey(BaseModel):
 
     key = models.UUIDField(unique=True, db_index=True)
     request_hash = models.CharField(max_length=64)
-    response_snapshot = models.JSONField(null=True, blank=True)
+    response_snapshot = EncryptedJSONField(null=True, blank=True)
     estado = models.CharField(max_length=15, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
     expires_at = models.DateTimeField(default=default_expiracion_idempotency_key)
 
@@ -255,6 +271,24 @@ class TransicionEstadoPago(AppendOnlyModel):
         return f'{self.pago_id}: {self.estado_anterior} -> {self.estado_nuevo}'
 
 
+class CheckoutTokenConsumido(AppendOnlyModel):
+    """Marca de uso único del checkout_token (hallazgo de seguridad — sin esto,
+    un checkout_token válido se podía reutilizar dentro de sus 15 minutos para
+    iniciar múltiples cobros, ya que IdempotencyKey es un UUID generado por el
+    cliente, no derivado del token). Se crea una sola vez, atómicamente, cuando
+    EjecutarCobroView llega a estado COMPLETADO — nunca antes (un reintento
+    legítimo tras timeout de red debe poder seguir usando el mismo token)."""
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    pago = models.ForeignKey(IntencionPago, on_delete=models.PROTECT, related_name='checkout_tokens_consumidos')
+
+    class Meta:
+        verbose_name = 'Checkout token consumido'
+        verbose_name_plural = 'Checkout tokens consumidos'
+
+    def __str__(self):
+        return f'{self.token_hash[:12]}... -> {self.pago_id}'
+
+
 class OperacionPagoBase(BaseModel):
     """Campos genéricos de proveedor compartidos por Autorizacion/Captura/Anulacion/Reembolso.
     Nunca un campo específico de un banco — principio de multi-proveedor sin choque
@@ -262,7 +296,7 @@ class OperacionPagoBase(BaseModel):
     referencia_proveedor = models.CharField(max_length=100)
     referencia_corta = models.CharField(max_length=20, blank=True)
     identificador_interbancario = models.CharField(max_length=62, blank=True)
-    payload_crudo = models.JSONField()
+    payload_crudo = EncryptedJSONField()
     monto = models.DecimalField(max_digits=19, decimal_places=2)
 
     class Meta:
@@ -346,7 +380,7 @@ class EventoOutbox(AppendOnlyModel):
 
     pago = models.ForeignKey(IntencionPago, on_delete=models.CASCADE, related_name='eventos_outbox')
     event_type = models.CharField(max_length=100, db_index=True)
-    payload = models.JSONField()
+    payload = EncryptedJSONField()
     schema_version = models.PositiveSmallIntegerField()
     estado = models.CharField(max_length=15, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
     sent_at = models.DateTimeField(null=True, blank=True)
@@ -359,3 +393,34 @@ class EventoOutbox(AppendOnlyModel):
 
     def __str__(self):
         return f'{self.event_type} ({self.estado})'
+
+
+# --- Webhook server-to-server (Bloque #17 parte 2) --------------------------
+
+class WebhookEntrega(AppendOnlyModel):
+    """1:1 con cada EventoOutbox cuya AplicacionRegistrada tiene webhook_url
+    seteada — no todo EventoOutbox tiene una fila acá (research-seguridad-y-
+    precio-iframe.md TAREA 2: el webhook es la fuente de verdad primaria de
+    confirmación, el postMessage al navegador queda como UX). Mismo patrón que
+    EventoOutbox (poller Celery beat, backoff fijo por tick) pero un modelo
+    propio, no genérico — evita acoplar el mecanismo de entrega HTTP con el de
+    RabbitMQ, que tienen semánticas de fallo distintas (confirms de broker vs.
+    status code HTTP)."""
+
+    class Estado(models.TextChoices):
+        PENDIENTE = 'pendiente', 'Pendiente'
+        ENTREGADO = 'entregado', 'Entregado'
+        AGOTADO = 'agotado', 'Agotado'
+
+    evento = models.OneToOneField(EventoOutbox, on_delete=models.CASCADE, related_name='webhook_entrega')
+    estado = models.CharField(max_length=15, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
+    intentos = models.PositiveSmallIntegerField(default=0)
+    ultimo_intento_at = models.DateTimeField(null=True, blank=True)
+    ultima_respuesta_status = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Entrega de webhook'
+        verbose_name_plural = 'Entregas de webhook'
+
+    def __str__(self):
+        return f'{self.evento_id} ({self.estado})'

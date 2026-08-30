@@ -21,7 +21,13 @@ class BDVPagoMovilC2PAdapter(PaymentProviderPort):
     detectar caída de transporte."""
 
     def __init__(self, base_url=None, api_key=None, timeout=None):
-        self._base_url = (base_url or settings.BDV_C2P_BASE_URL).rstrip('/')
+        base_url = base_url or settings.BDV_C2P_BASE_URL
+        if not base_url:
+            raise RuntimeError(
+                'BDV_C2P_BASE_URL no está configurada — sin default al QA real del banco '
+                '(evita apuntar por accidente al ambiente del proveedor sin querer).',
+            )
+        self._base_url = base_url.rstrip('/')
         self._api_key = api_key or settings.BDV_C2P_API_KEY
         self._timeout = timeout or settings.BDV_C2P_TIMEOUT_SEGUNDOS
 

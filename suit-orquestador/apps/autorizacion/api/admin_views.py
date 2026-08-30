@@ -44,6 +44,7 @@ class AdminAplicacionListCreateView(generics.ListCreateAPIView):
                 dominio=datos['dominio'],
                 proveedor_codigo=datos['proveedor'],
                 app_origen_id=datos.get('app_origen_id'),
+                webhook_url=datos.get('webhook_url'),
             )
         except ProveedorNoEncontradoError:
             return Response({'error': 'proveedor_no_encontrado'}, status=status.HTTP_400_BAD_REQUEST)
@@ -58,9 +59,10 @@ class AdminAplicacionListCreateView(generics.ListCreateAPIView):
 
 
 class AdminAplicacionActivarView(generics.UpdateAPIView):
-    """PATCH {"activa": true|false} — kill switch de nivel superior, el mismo que
-    consulta ValidacionAccesoService. No expone edición de dominio/proveedor
-    individual todavía (fuera de alcance de este bloque)."""
+    """PATCH {"activa": true|false} y/o {"webhook_url": "..."} — kill switch de
+    nivel superior (el mismo que consulta ValidacionAccesoService) y configuración
+    del webhook server-to-server (Bloque #17 parte 2). No expone edición de
+    dominio/proveedor individual todavía (fuera de alcance de ese bloque)."""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAdminUser]
     queryset = AplicacionRegistrada.objects.all()
@@ -68,4 +70,8 @@ class AdminAplicacionActivarView(generics.UpdateAPIView):
     http_method_names = ['patch']
 
     def perform_update(self, serializer):
-        RegistroAplicacionService.activar_desactivar(serializer.instance, serializer.validated_data['activa'])
+        datos = serializer.validated_data
+        if 'activa' in datos:
+            RegistroAplicacionService.activar_desactivar(serializer.instance, datos['activa'])
+        if 'webhook_url' in datos:
+            RegistroAplicacionService.configurar_webhook(serializer.instance, datos['webhook_url'])

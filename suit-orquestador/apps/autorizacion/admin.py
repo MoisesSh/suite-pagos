@@ -9,6 +9,7 @@ from apps.autorizacion.domain.models import (
     Captura,
     CodigoRespuestaProveedor,
     DominioPermitido,
+    CheckoutTokenConsumido,
     EventoOutbox,
     IdempotencyKey,
     IntencionPago,
@@ -18,6 +19,7 @@ from apps.autorizacion.domain.models import (
     Reembolso,
     TipoOperacionProveedor,
     TransicionEstadoPago,
+    WebhookEntrega,
 )
 
 
@@ -108,6 +110,26 @@ class IdempotencyKeyAdmin(admin.ModelAdmin):
     search_fields = ('key',)
     list_filter = ('estado',)
     readonly_fields = ('created_at', 'updated_at')
+    # response_snapshot trae el body completo de la respuesta de cobro (puede
+    # incluir referencia_corta y otros datos operativos) — fuera del detalle del
+    # admin como mitigación rápida (hallazgo de seguridad #3, mientras se decide
+    # el mecanismo de cifrado de campo).
+    exclude = ('response_snapshot',)
+
+
+@admin.register(CheckoutTokenConsumido)
+class CheckoutTokenConsumidoAdmin(admin.ModelAdmin):
+    list_display = ('token_hash', 'pago', 'created_at')
+    search_fields = ('token_hash',)
+    readonly_fields = ('created_at',)
+
+    # Marca de auditoría de uso único — igual criterio que TransicionEstadoPago:
+    # no editable ni borrable a mano desde el admin.
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 # --- Agregado de pago (2.2) ---------------------------------------------
@@ -141,6 +163,11 @@ class OperacionPagoAdminBase(admin.ModelAdmin):
     list_display = ('pago', 'proveedor', 'referencia_proveedor', 'referencia_corta', 'monto', 'codigo_respuesta')
     list_filter = ('proveedor', 'codigo_respuesta')
     search_fields = ('referencia_proveedor', 'referencia_corta', 'identificador_interbancario')
+    # payload_crudo es la respuesta íntegra de BDV (cédula, teléfono del pagador,
+    # etc. en claro) — fuera del detalle del admin como mitigación rápida
+    # (hallazgo de seguridad #3, mientras se decide el mecanismo de cifrado de
+    # campo). No se pierde para diagnóstico: sigue accesible por shell/consulta.
+    exclude = ('payload_crudo',)
 
 
 @admin.register(Autorizacion)
@@ -169,4 +196,13 @@ class ReembolsoAdmin(OperacionPagoAdminBase):
 class EventoOutboxAdmin(admin.ModelAdmin):
     list_display = ('pago', 'event_type', 'estado', 'schema_version', 'created_at', 'sent_at')
     list_filter = ('estado', 'event_type')
+    readonly_fields = ('created_at',)
+
+
+# --- Webhook server-to-server (Bloque #17 parte 2) ----------------------
+
+@admin.register(WebhookEntrega)
+class WebhookEntregaAdmin(admin.ModelAdmin):
+    list_display = ('evento', 'estado', 'intentos', 'ultima_respuesta_status', 'ultimo_intento_at')
+    list_filter = ('estado',)
     readonly_fields = ('created_at',)

@@ -15,6 +15,7 @@ from apps.autorizacion.api.serializers import (
 from apps.autorizacion.application.services import (
     AccesoNoAutorizadoError,
     CheckoutTokenService,
+    CheckoutTokenYaUtilizadoError,
     FlujoCobroC2PService,
     IdempotencyConflictError,
     IdempotencyService,
@@ -85,6 +86,9 @@ class SolicitarOtpView(views.APIView):
         if error_response is not None:
             return error_response
 
+        if CheckoutTokenService.esta_consumido(datos['checkout_token']):
+            return Response({'error': 'checkout_token_ya_utilizado'}, status=status.HTTP_409_CONFLICT)
+
         adaptador = BDVPagoMovilC2PAdapter()
         try:
             FlujoCobroC2PService.solicitar_otp(adaptador=adaptador, cedula_pagador=datos['cedula_pagador'])
@@ -148,6 +152,13 @@ class EjecutarCobroView(views.APIView):
         # OneToOneField IdempotencyKey.intencion_pago no admite una segunda fila.
         pago = getattr(idem, 'intencion_pago', None)
         if pago is None:
+            # Uso único del checkout_token: solo se evalúa acá, nunca antes del
+            # cache-hit de arriba — un reintento con la MISMA idempotency_key de
+            # un cobro ya completado no llega a este punto (ver comentario en
+            # checkout_token_resolver.py). Esto bloquea específicamente un
+            # intento NUEVO (idempotency_key distinta) sobre un token ya usado.
+            if CheckoutTokenService.esta_consumido(datos['checkout_token']):
+                return Response({'error': 'checkout_token_ya_utilizado'}, status=status.HTTP_409_CONFLICT)
             pago = FlujoCobroC2PService.iniciar(
                 aplicacion=aplicacion, monto=monto, moneda_codigo=moneda, idempotency_key=idem,
             )
@@ -178,4 +189,13 @@ class EjecutarCobroView(views.APIView):
 
         body = {'pago_id': str(pago.id), 'estado': pago.estado_actual, 'referencia_corta': captura.referencia_corta}
         IdempotencyService.finalizar(idem, estado=IdempotencyKey.Estado.COMPLETADO, status_code=status.HTTP_200_OK, body=body)
+        try:
+            CheckoutTokenService.marcar_consumido(datos['checkout_token'], pago)
+        except CheckoutTokenYaUtilizadoError:
+            # Carrera extremadamente estrecha entre dos requests concurrentes con
+            # el mismo token (ambos pasaron el chequeo de resolver_checkout_token
+            # antes de que cualquiera terminara): el cobro ya se completó y ya
+            # está en la respuesta — no hay nada que revertir ni que informar al
+            # cliente distinto de un cobro exitoso.
+            pass
         return Response(body, status=status.HTTP_200_OK)

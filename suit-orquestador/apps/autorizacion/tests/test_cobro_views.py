@@ -124,6 +124,25 @@ class EjecutarCobroViewTests(_ConCatalogoYToken):
         self.assertEqual(MockAdapter.return_value.procesar_cobro.call_count, 1)
         self.assertEqual(IntencionPago.objects.count(), 1)
 
+    @patch('apps.autorizacion.api.views.BDVPagoMovilC2PAdapter')
+    def test_checkout_token_no_reutilizable_con_idempotency_key_nueva(self, MockAdapter):
+        """Hallazgo de seguridad: un checkout_token que ya completó un cobro no
+        puede reutilizarse con una idempotency_key NUEVA para iniciar otro
+        IntencionPago — antes esto no lo bloqueaba nada (IdempotencyKey es un
+        UUID generado por el cliente, no atado al token)."""
+        MockAdapter.return_value.procesar_cobro.return_value = self._resultado_cobro_exitoso()
+        body1 = {**COBRO_BODY_BASE, 'checkout_token': self.checkout_token, 'idempotency_key': str(uuid.uuid4())}
+        body2 = {**COBRO_BODY_BASE, 'checkout_token': self.checkout_token, 'idempotency_key': str(uuid.uuid4())}
+
+        primera = self.client.post('/api/autorizacion/cobro/', body1)
+        segunda = self.client.post('/api/autorizacion/cobro/', body2)
+
+        self.assertEqual(primera.status_code, 200)
+        self.assertEqual(segunda.status_code, 409)
+        self.assertEqual(segunda.data['error'], 'checkout_token_ya_utilizado')
+        self.assertEqual(IntencionPago.objects.count(), 1)
+        self.assertEqual(MockAdapter.return_value.procesar_cobro.call_count, 1)
+
     def test_idempotency_key_con_payload_distinto_responde_409(self):
         idem_key = str(uuid.uuid4())
         body1 = {**COBRO_BODY_BASE, 'checkout_token': self.checkout_token, 'idempotency_key': idem_key}

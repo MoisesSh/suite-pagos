@@ -1,5 +1,8 @@
+import hashlib
+
 from django.conf import settings
 from django.core import signing
+from django.db import IntegrityError
 
 SALT = 'autorizacion.checkout_token'
 
@@ -7,6 +10,12 @@ SALT = 'autorizacion.checkout_token'
 class CheckoutTokenInvalidoError(Exception):
     """Token vencido o manipulado — el endpoint de cobro debe devolver 401 genérico,
     nunca el detalle interno de la firma."""
+
+
+class CheckoutTokenYaUtilizadoError(Exception):
+    """El token ya se usó para completar un cobro — no depende de que el cliente
+    reuse la misma idempotency_key (esa la genera el propio cliente, un UUID
+    nuevo por intento no está atado al checkout_token)."""
 
 
 class CheckoutTokenService:
@@ -36,11 +45,40 @@ class CheckoutTokenService:
                 'concepto': concepto,
             },
             salt=SALT,
+            key=settings.CHECKOUT_TOKEN_SIGNING_KEY,
         )
 
     @staticmethod
     def verificar(token):
         try:
-            return signing.loads(token, salt=SALT, max_age=settings.CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS)
+            return signing.loads(
+                token, salt=SALT, max_age=settings.CHECKOUT_TOKEN_MAX_AGE_SEGUNDOS,
+                key=settings.CHECKOUT_TOKEN_SIGNING_KEY,
+            )
         except signing.BadSignature as exc:
             raise CheckoutTokenInvalidoError('token_invalido_o_expirado') from exc
+
+    @staticmethod
+    def hash_de(token):
+        # No se guarda el token firmado tal cual (viaja monto/moneda/concepto
+        # legibles, ver reporte-seguridad-y-precio-iframe.md #1: signing.dumps
+        # firma, no cifra) — solo su hash, como identificador de uso único.
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    @staticmethod
+    def esta_consumido(token):
+        from apps.autorizacion.domain.models import CheckoutTokenConsumido
+
+        return CheckoutTokenConsumido.objects.filter(token_hash=CheckoutTokenService.hash_de(token)).exists()
+
+    @staticmethod
+    def marcar_consumido(token, pago):
+        from apps.autorizacion.domain.models import CheckoutTokenConsumido
+
+        try:
+            CheckoutTokenConsumido.objects.create(token_hash=CheckoutTokenService.hash_de(token), pago=pago)
+        except IntegrityError:
+            # Carrera entre dos requests concurrentes con el mismo token: la
+            # segunda en llegar a este punto pierde la carrera de la constraint
+            # unique — no es un error real, el token ya quedó marcado.
+            raise CheckoutTokenYaUtilizadoError('checkout_token_ya_utilizado')

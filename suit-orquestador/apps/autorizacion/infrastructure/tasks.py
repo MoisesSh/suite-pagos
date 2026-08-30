@@ -20,3 +20,20 @@ def publicar_eventos_outbox():
             resultado['enviados'], resultado['reintentados'], resultado['fallidos'],
         )
     return resultado
+
+
+@shared_task
+def entregar_webhooks():
+    """Dispara WebhookRelayService.procesar_lote() — registrada en el
+    beat_schedule de config/celery.py cada WEBHOOK_RELAY_INTERVALO_SEGUNDOS.
+    Sin autoretry propio: cada fila ya maneja su propio reintento/backoff a
+    nivel de WebhookEntrega.intentos (Bloque #17 parte 2)."""
+    from apps.autorizacion.application.services.webhook_relay import WebhookRelayService
+
+    resultado = WebhookRelayService.procesar_lote()
+    if resultado['entregados'] or resultado['agotados']:
+        logger.info(
+            'Relay de webhooks: %s entregados, %s reintentados, %s agotados definitivamente.',
+            resultado['entregados'], resultado['reintentados'], resultado['agotados'],
+        )
+    return resultado

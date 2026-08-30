@@ -5,6 +5,7 @@ from django.shortcuts import render
 from django.views import View
 
 from apps.autorizacion.api.checkout_token_resolver import resolver_checkout_token
+from apps.autorizacion.application.services import CheckoutTokenService
 from apps.autorizacion.domain.models import Banco, DominioPermitido
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,9 @@ class FormularioCobroView(View):
         if error_response is not None:
             motivo = error_response.data.get('error', 'checkout_token_invalido')
             return self._render_error(request, motivo)
+
+        if CheckoutTokenService.esta_consumido(checkout_token):
+            return self._render_error(request, 'checkout_token_ya_utilizado')
 
         dominios = list(
             DominioPermitido.objects.filter(aplicacion=aplicacion, activo=True).values_list('dominio', flat=True),

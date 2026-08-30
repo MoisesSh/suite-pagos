@@ -96,6 +96,30 @@ class AdminAplicacionListCreateViewTests(_ConTokenDeStaff):
         response = self.client.get('/api/autorizacion/admin/aplicaciones/')
         self.assertEqual(response.status_code, 401)
 
+    def test_crear_con_webhook_url_genera_secret_visible_en_el_listado(self):
+        self._auth(self.staff_token)
+        self.client.post('/api/autorizacion/admin/aplicaciones/', {
+            'nombre': 'Con Webhook', 'dominio': 'webhook-admin.gob.ve', 'proveedor': 'BDV',
+            'webhook_url': 'https://webhook-admin.gob.ve/hook',
+        })
+
+        response = self.client.get('/api/autorizacion/admin/aplicaciones/')
+
+        item = next(a for a in response.data if a['nombre'] == 'Con Webhook')
+        self.assertEqual(item['webhook_url'], 'https://webhook-admin.gob.ve/hook')
+        self.assertTrue(item['webhook_secret'])
+
+    def test_crear_intentando_mandar_webhook_secret_lo_ignora(self):
+        # AdminAplicacionCrearSerializer no tiene ese campo — nunca se acepta
+        # desde el body, se genera solo (AplicacionRegistrada.save()).
+        self._auth(self.staff_token)
+        response = self.client.post('/api/autorizacion/admin/aplicaciones/', {
+            'nombre': 'X', 'dominio': 'no-acepta-secret.gob.ve', 'proveedor': 'BDV',
+            'webhook_url': 'https://x.gob.ve/hook', 'webhook_secret': 'secreto-inventado',
+        })
+        aplicacion = AplicacionRegistrada.objects.get(id=response.data['id'])
+        self.assertNotEqual(aplicacion.webhook_secret, 'secreto-inventado')
+
 
 class AdminAplicacionActivarViewTests(_ConTokenDeStaff):
     def setUp(self):
@@ -119,3 +143,30 @@ class AdminAplicacionActivarViewTests(_ConTokenDeStaff):
         self._auth(self.no_staff_token)
         response = self.client.patch(f'/api/autorizacion/admin/aplicaciones/{self.aplicacion.id}/', {'activa': False})
         self.assertEqual(response.status_code, 403)
+
+    def test_patch_webhook_url_genera_secret(self):
+        self._auth(self.staff_token)
+        self.assertEqual(self.aplicacion.webhook_secret, '')
+
+        response = self.client.patch(
+            f'/api/autorizacion/admin/aplicaciones/{self.aplicacion.id}/',
+            {'webhook_url': 'https://conatel.gob.ve/hook'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.aplicacion.refresh_from_db()
+        self.assertEqual(self.aplicacion.webhook_url, 'https://conatel.gob.ve/hook')
+        self.assertTrue(self.aplicacion.webhook_secret)
+
+    def test_patch_solo_activa_no_toca_webhook_url(self):
+        self.aplicacion.webhook_url = 'https://ya-configurado.gob.ve/hook'
+        self.aplicacion.save()
+        secret_original = self.aplicacion.webhook_secret
+        self._auth(self.staff_token)
+
+        response = self.client.patch(f'/api/autorizacion/admin/aplicaciones/{self.aplicacion.id}/', {'activa': False})
+
+        self.assertEqual(response.status_code, 200)
+        self.aplicacion.refresh_from_db()
+        self.assertEqual(self.aplicacion.webhook_url, 'https://ya-configurado.gob.ve/hook')
+        self.assertEqual(self.aplicacion.webhook_secret, secret_original)

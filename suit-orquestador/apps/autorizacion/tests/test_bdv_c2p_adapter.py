@@ -1,6 +1,8 @@
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
+from django.test import override_settings
+
 from apps.autorizacion.domain.errores_proveedor import ProveedorPagoError, ProveedorPagoIndisponibleError
 from apps.autorizacion.infrastructure.adapters.bdv_c2p import BDVPagoMovilC2PAdapter
 from apps.autorizacion.tests.base import BaseAPITestCase
@@ -23,6 +25,13 @@ class BDVPagoMovilC2PAdapterTests(BaseAPITestCase):
         self.adaptador = BDVPagoMovilC2PAdapter(
             base_url='https://bdvconciliacionqa.banvenez.com:444', api_key='dummy-key', timeout=5,
         )
+
+    @override_settings(BDV_C2P_BASE_URL=None)
+    def test_sin_base_url_configurada_lanza_runtime_error(self):
+        # Hallazgo de seguridad: BDV_C2P_BASE_URL ya no cae por default al QA real
+        # del banco — sin la env var, debe fallar explícito, no silenciosamente.
+        with self.assertRaises(RuntimeError):
+            BDVPagoMovilC2PAdapter(api_key='dummy-key')
 
     @patch('apps.autorizacion.infrastructure.adapters.bdv_c2p.requests.post')
     def test_generar_otp_exitoso(self, mock_post):

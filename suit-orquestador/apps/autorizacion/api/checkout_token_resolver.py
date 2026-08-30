@@ -23,6 +23,13 @@ def resolver_checkout_token(checkout_token, proveedor_codigo):
     except CheckoutTokenInvalidoError:
         return None, None, Response({'error': 'checkout_token_invalido'}, status=status.HTTP_401_UNAUTHORIZED)
 
+    # Nota: el chequeo de "uso único" (CheckoutTokenService.esta_consumido) NO
+    # vive acá. En EjecutarCobroView debe evaluarse después del cache-hit de
+    # idempotency_key — un reintento legítimo con la MISMA idempotency_key de un
+    # cobro ya completado debe seguir devolviendo la respuesta cacheada, aunque
+    # el token ya esté marcado consumido. Solo bloquea un intento genuinamente
+    # nuevo (idempotency_key distinta) sobre un token ya usado.
+
     if payload['proveedor_codigo'] != proveedor_codigo:
         return None, None, Response({'error': 'proveedor_no_coincide_con_token'}, status=status.HTTP_403_FORBIDDEN)
 

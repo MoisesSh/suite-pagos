@@ -4,7 +4,14 @@ from unittest.mock import Mock
 
 from apps.autorizacion.application.services import FlujoCobroC2PService
 from apps.autorizacion.domain.errores_proveedor import ProveedorPagoError, ProveedorPagoIndisponibleError
-from apps.autorizacion.domain.models import AplicacionRegistrada, Autorizacion, Captura, EventoOutbox, IntencionPago
+from apps.autorizacion.domain.models import (
+    AplicacionRegistrada,
+    Autorizacion,
+    Captura,
+    EventoOutbox,
+    IntencionPago,
+    WebhookEntrega,
+)
 from apps.autorizacion.domain.puertos_pago import PaymentProviderPort, ResultadoCobro, ResultadoOtp
 from apps.autorizacion.tests.base import BaseAPITestCase
 
@@ -110,6 +117,43 @@ class FlujoCobroC2PServiceTests(BaseAPITestCase):
         self.assertEqual(payload['estado'], IntencionPago.EstadoPago.CAPTURADO)
         self.assertEqual(payload['routing_flag'], IntencionPago.RoutingFlag.LEGACY)
         self.assertEqual(payload['payload_crudo_captura'], captura.payload_crudo)
+
+    def test_ejecutar_cobro_exitoso_sin_webhook_url_no_crea_webhook_entrega(self):
+        # self.aplicacion no tiene webhook_url seteada (setUp) — no toda app lo
+        # necesita (Bloque #17 parte 2).
+        pago = FlujoCobroC2PService.iniciar(aplicacion=self.aplicacion, monto=Decimal('1000.60'), moneda_codigo='VES')
+        adaptador = Mock(spec=PaymentProviderPort)
+        adaptador.procesar_cobro.return_value = ResultadoCobro(
+            codigo='1000', mensaje='Proceso finalizado', referencia_corta='090037579602',
+            identificador_interbancario='...', payload_crudo={'code': '1000'},
+        )
+
+        FlujoCobroC2PService.ejecutar_cobro(
+            pago, adaptador=adaptador, cedula_pagador='V12345678', telefono_pagador='04125692243',
+            banco_codigo='0102', concepto='Pago', otp='5551111', telefono_comercio='04140282647',
+        )
+
+        self.assertEqual(WebhookEntrega.objects.count(), 0)
+
+    def test_ejecutar_cobro_exitoso_con_webhook_url_crea_webhook_entrega_pendiente(self):
+        self.aplicacion.webhook_url = 'https://conatel.gob.ve/webhooks/pagos'
+        self.aplicacion.save()
+        self.assertTrue(self.aplicacion.webhook_secret)  # generado solo al setear la URL
+
+        pago = FlujoCobroC2PService.iniciar(aplicacion=self.aplicacion, monto=Decimal('1000.60'), moneda_codigo='VES')
+        adaptador = Mock(spec=PaymentProviderPort)
+        adaptador.procesar_cobro.return_value = ResultadoCobro(
+            codigo='1000', mensaje='Proceso finalizado', referencia_corta='090037579602',
+            identificador_interbancario='...', payload_crudo={'code': '1000'},
+        )
+
+        FlujoCobroC2PService.ejecutar_cobro(
+            pago, adaptador=adaptador, cedula_pagador='V12345678', telefono_pagador='04125692243',
+            banco_codigo='0102', concepto='Pago', otp='5551111', telefono_comercio='04140282647',
+        )
+
+        entrega = WebhookEntrega.objects.get(evento__pago=pago)
+        self.assertEqual(entrega.estado, WebhookEntrega.Estado.PENDIENTE)
 
     def test_ejecutar_cobro_fallido_no_publica_evento_outbox(self):
         pago = FlujoCobroC2PService.iniciar(aplicacion=self.aplicacion, monto=Decimal('1000.60'), moneda_codigo='VES')

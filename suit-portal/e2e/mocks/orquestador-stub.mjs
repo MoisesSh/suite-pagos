@@ -6,8 +6,6 @@
 import { createServer } from "node:http";
 
 const PORT = 4100;
-const EXPECTED_TOKEN = "test-token-e2e";
-const DOMINIO_DUPLICADO = "ya-registrado.gob.ve";
 
 let checkoutTokenCounter = 0;
 
@@ -35,26 +33,6 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/health") {
     return json(res, 200, { ok: true });
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/autorizacion/admin/aplicaciones/") {
-    const auth = req.headers.authorization;
-    if (auth !== `Token ${EXPECTED_TOKEN}`) {
-      return json(res, 401, { detail: "Invalid token." });
-    }
-
-    const body = JSON.parse((await readBody(req)) || "{}");
-
-    if (body.dominio === DOMINIO_DUPLICADO) {
-      return json(res, 400, { dominio: ["Ya existe una aplicación con este dominio."] });
-    }
-
-    return json(res, 201, {
-      id: "b7e5c9c0-0000-4000-8000-000000000001",
-      nombre: body.nombre,
-      dominio: body.dominio,
-      proveedor: body.proveedor,
-    });
   }
 
   if (req.method === "POST" && url.pathname === "/api/autorizacion/validar-acceso/") {

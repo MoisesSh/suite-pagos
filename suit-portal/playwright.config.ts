@@ -9,7 +9,7 @@ export default defineConfig({
   retries: 1,
   webServer: [
     {
-      // Stub hermético de suit-orquestador (admin, validar-acceso, formulario) — ver e2e/mocks/.
+      // Stub hermético de suit-orquestador (validar-acceso, formulario) — ver e2e/mocks/.
       command: "node e2e/mocks/orquestador-stub.mjs",
       url: "http://localhost:4100/health",
       reuseExistingServer: true,
@@ -22,7 +22,6 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         ORQUESTADOR_API_URL: "http://localhost:4100",
-        ORQUESTADOR_ADMIN_TOKEN: "test-token-e2e",
         NEXT_PUBLIC_ORQUESTADOR_PUBLIC_URL: "http://localhost:4100",
       },
     },

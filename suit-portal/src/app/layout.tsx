@@ -16,13 +16,13 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Developer Portal — Suite de Pagos Conatel",
-  description: "Registro de aplicaciones y documentación de la pasarela de pagos.",
+  description: "Documentación para integrar la pasarela de pagos por iframe.",
 };
 
 const NAV_LINKS = [
   { href: "/", label: "Inicio" },
+  { href: "/guia", label: "Guía de integración" },
   { href: "/documentacion", label: "Documentación" },
-  { href: "/aplicaciones/nueva", label: "Registrar aplicación" },
   { href: "/probar-iframe", label: "Probar iframe de pago" },
 ] as const;
 

@@ -7,6 +7,7 @@ export interface EventoRaw {
   schema_version: number;
   procesado_at: string | null;
   created_at: string;
+  transaccion_ledger_id: string | null;
 }
 
 export function mapperEvento(raw: EventoRaw): EventoEntity {
@@ -17,5 +18,6 @@ export function mapperEvento(raw: EventoRaw): EventoEntity {
     schemaVersion: raw.schema_version,
     procesadoAt: raw.procesado_at,
     createdAt: raw.created_at,
+    transaccionLedgerId: raw.transaccion_ledger_id,
   };
 }

@@ -5,4 +5,5 @@ export interface EventoItemDTO {
   schemaVersion: number;
   procesadoAt: string | null;
   createdAt: string;
+  transaccionLedgerId: string | null;
 }

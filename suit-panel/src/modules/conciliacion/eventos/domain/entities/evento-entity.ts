@@ -5,4 +5,5 @@ export interface EventoEntity {
   readonly schemaVersion: number;
   readonly procesadoAt: string | null;
   readonly createdAt: string;
+  readonly transaccionLedgerId: string | null;
 }

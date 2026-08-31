@@ -10,5 +10,6 @@ export async function listEventos(repo: RepoEvento, search?: string): Promise<Ev
     schemaVersion: entity.schemaVersion,
     procesadoAt: entity.procesadoAt,
     createdAt: entity.createdAt,
+    transaccionLedgerId: entity.transaccionLedgerId,
   }));
 }

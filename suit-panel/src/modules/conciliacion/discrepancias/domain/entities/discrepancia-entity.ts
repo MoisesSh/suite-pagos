@@ -14,4 +14,5 @@ export interface DiscrepanciaEntity {
   readonly resueltoAt: string | null;
   readonly notas: string;
   readonly createdAt: string;
+  readonly transaccionLedgerId: string | null;
 }

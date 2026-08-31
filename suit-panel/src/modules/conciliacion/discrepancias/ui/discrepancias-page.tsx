@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -128,6 +130,14 @@ export default function DiscrepanciasPage() {
                     <span>Resuelta por: {discrepancia.resueltoPor.username}</span>
                   )}
                 </div>
+                {discrepancia.transaccionLedgerId && (
+                  <Link
+                    href={`/transacciones-ledger/${discrepancia.transaccionLedgerId}`}
+                    className={buttonVariants({ variant: "link", className: "h-auto w-fit p-0 text-xs" })}
+                  >
+                    Ver transaccion de ledger
+                  </Link>
+                )}
               </CardContent>
             </Card>
           ))}

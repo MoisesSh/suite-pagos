@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,6 +45,14 @@ export default function EventosPage() {
                 <div>
                   <p className="font-medium text-foreground">{evento.eventType}</p>
                   <p className="text-xs text-muted-foreground">{evento.eventId}</p>
+                  {evento.transaccionLedgerId && (
+                    <Link
+                      href={`/transacciones-ledger/${evento.transaccionLedgerId}`}
+                      className={buttonVariants({ variant: "link", className: "h-auto w-fit p-0 text-xs" })}
+                    >
+                      Ver transaccion de ledger
+                    </Link>
+                  )}
                 </div>
                 <div className="text-right text-xs text-muted-foreground">
                   <p>v{evento.schemaVersion}</p>

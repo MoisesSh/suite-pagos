@@ -21,6 +21,7 @@ export interface DiscrepanciaRaw {
   resuelto_at: string | null;
   notas: string;
   created_at: string;
+  transaccion_ledger_id: string | null;
 }
 
 function mapUsuarioResumen(raw: UsuarioResumenRaw): UsuarioResumen {
@@ -46,5 +47,6 @@ export function mapperDiscrepancia(raw: DiscrepanciaRaw): DiscrepanciaEntity {
     resueltoAt: raw.resuelto_at,
     notas: raw.notas,
     createdAt: raw.created_at,
+    transaccionLedgerId: raw.transaccion_ledger_id,
   };
 }

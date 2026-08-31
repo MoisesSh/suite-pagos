@@ -15,6 +15,7 @@ export function toDiscrepanciaItemDTO(entity: DiscrepanciaEntity): DiscrepanciaI
     resueltoAt: entity.resueltoAt,
     notas: entity.notas,
     createdAt: entity.createdAt,
+    transaccionLedgerId: entity.transaccionLedgerId,
   };
 }
 

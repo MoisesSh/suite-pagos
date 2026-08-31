@@ -13,6 +13,7 @@ export interface DiscrepanciaItemDTO {
   resueltoAt: string | null;
   notas: string;
   createdAt: string;
+  transaccionLedgerId: string | null;
 }
 
 export interface ResolverDiscrepanciaDTO {

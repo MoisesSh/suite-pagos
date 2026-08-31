@@ -9,7 +9,7 @@ Payment gateway interno para Conatel que desacopla medios de pago del core de la
 - **Bóveda de tokenización**: proveedor PCI-DSS L1 externo — el PAN nunca toca infra propia.
 - **Developer Portal** (Next.js): API keys, métricas de uso.
 
-Repo actual (`suit-backend`/`suit-frontend`) está en esqueleto — sin modelos de datos aún.
+Repo actual (`suit-backend`/`suit-panel`) está en esqueleto — sin modelos de datos aún.
 
 ## 2. Implicaciones directas para el esquema de datos
 

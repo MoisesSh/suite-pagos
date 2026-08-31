@@ -2,7 +2,7 @@
 
 > Extraído directamente del código ya implementado y testeado (no del plan de
 > datos). Se actualiza cada vez que un backend cierra un bloque con endpoints
-> nuevos. Fuente de verdad para `suit-frontend` y `suit-portal`.
+> nuevos. Fuente de verdad para `suit-panel` y `suit-portal`.
 
 Última actualización: 2026-08-27 15:30
 
@@ -96,7 +96,7 @@ individual, o agregar un segundo dominio/proveedor a una app ya creada.
 
 1. ~~CRUD de registro de apps/dominios~~ — **RESUELTO** (ver sección Admin arriba).
    `suit-portal` puede reemplazar su mock por el endpoint real.
-2. ~~Auth JWT de `suit-orquestador`~~ — **RESUELTO por decisión**: `suit-frontend`
+2. ~~Auth JWT de `suit-orquestador`~~ — **RESUELTO por decisión**: `suit-panel`
    solo lee de `suit-conciliacion` por ahora — no existe ninguna vista del panel
    que necesite datos crudos del Orquestador (transacciones/intenciones de pago
    en curso), solo discrepancias/eventos/ledger de Conciliación. `suit-orquestador`

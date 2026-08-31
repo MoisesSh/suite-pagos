@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "suit-frontend",
+  title: "suit-panel",
   description: "Panel administrativo interno de suit-pagos",
 };
 

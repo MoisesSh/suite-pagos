@@ -15,7 +15,7 @@ servicio vía `--build-arg SERVICE_DIR=<carpeta>`.
 | `suit-orquestador` | Django/DRF | 8001 | `postgres-orquestador` |
 | `suit-conciliacion` | Django/DRF | 8002 | `postgres-conciliacion` |
 | `suit-conciliacion-celery-worker` | Celery worker | — | (comparte DB de conciliación) |
-| `suit-frontend` | Next.js (panel admin) | 3000 | — |
+| `suit-panel` | Next.js (panel admin) | 3000 | — |
 | `suit-portal` | Next.js (Developer Portal) | 3001 | — |
 
 **Nota:** `suit-orquestador` no tiene worker Celery propio — su relay
@@ -48,7 +48,7 @@ RABBITMQ_USER=guest
 RABBITMQ_PASSWORD=guest
 ```
 
-Los frontends leen `suit-frontend/.env.local` y `suit-portal/.env.local`
+Los frontends leen `suit-panel/.env.local` y `suit-portal/.env.local`
 respectivamente (convención estándar de Next.js).
 
 ## Uso
@@ -90,6 +90,6 @@ docker compose -p suit-pagos -f deploy/docker-compose.yml down -v
 - [ ] Healthcheck de RabbitMQ responde (`rabbitmq-diagnostics ping`)
 - [ ] `suit-orquestador` responde en `http://localhost:8001/api/autorizacion/validar-acceso/`
 - [ ] `suit-conciliacion` responde y el worker Celery conecta a RabbitMQ + su Postgres propio
-- [ ] `suit-frontend` responde en `http://localhost:3000`
+- [ ] `suit-panel` responde en `http://localhost:3000`
 - [ ] `suit-portal` responde en `http://localhost:3001`
 - [ ] Ningún contenedor de `suit-orquestador` puede alcanzar `postgres-conciliacion` ni viceversa (verificar aislamiento de red si se usan redes Docker separadas)

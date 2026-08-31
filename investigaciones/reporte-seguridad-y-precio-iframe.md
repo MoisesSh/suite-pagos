@@ -1,13 +1,13 @@
 # Reporte consolidado — Auditoría de seguridad y patrón de precio en iframe
 
-Suite Centralizada de Pagos (suit-orquestador, suit-conciliacion, suit-frontend, suit-portal, deploy/).
+Suite Centralizada de Pagos (suit-orquestador, suit-conciliacion, suit-panel, suit-portal, deploy/).
 Investigación de solo lectura, sin cambios de código. Fecha: 2026-08-29.
 
 ---
 
 # TAREA 1 — Auditoría de seguridad
 
-**Alcance:** suit-orquestador, suit-conciliacion, suit-frontend, suit-portal, deploy/.
+**Alcance:** suit-orquestador, suit-conciliacion, suit-panel, suit-portal, deploy/.
 
 ## CRÍTICA
 
@@ -74,14 +74,14 @@ No hay `django-cryptography`, `django-fernet-fields`, `pgcrypto` ni ningún meca
 Son banderas de compatibilidad AMQP 0-9-1 para Kombu/Celery/Flower; siguen requiriendo la misma conexión autenticada que cualquier otra operación del broker. No abren superficie nueva a clientes no autenticados. El riesgo real de este componente es el punto 7 (credenciales por defecto), no este `.conf`.
 
 ### 11. Inconsistencia SameSite entre cookie del backend (`Strict`) y la que realmente fija Next.js (`Lax`)
-`suit-conciliacion/config/settings.py:191` vs `suit-frontend/src/auth.config.ts:42`, `auth.ts:27` — el usuario final queda bajo `Lax` porque Next.js re-setea la cookie server-side; la política `Strict` del backend solo aplica a consumidores directos. No crítico, pero es una discrepancia de diseño no documentada que conviene alinear o al menos documentar explícitamente.
+`suit-conciliacion/config/settings.py:191` vs `suit-panel/src/auth.config.ts:42`, `auth.ts:27` — el usuario final queda bajo `Lax` porque Next.js re-setea la cookie server-side; la política `Strict` del backend solo aplica a consumidores directos. No crítico, pero es una discrepancia de diseño no documentada que conviene alinear o al menos documentar explícitamente.
 
 ### 12. `BDV_C2P_BASE_URL` con default apuntando al ambiente QA real del banco
 `suit-orquestador/config/settings.py:173-174` — si falta la env var, cae a `https://bdvconciliacionqa.banvenez.com:444` con `API_KEY=''`. Impacto bajo (rechazo por key vacía) pero inconsistente con el criterio más conservador (`default=None`) que sí aplica suit-conciliacion.
 
 ## BAJA / COSMÉTICA
 
-- **`middleware.ts` ausente en suit-frontend** — la protección de rutas depende solo del layout `(app)` (`auth()` + `redirect`), funciona hoy pero no es defensa en profundidad ante nuevas rutas fuera de ese layout group.
+- **`middleware.ts` ausente en suit-panel** — la protección de rutas depende solo del layout `(app)` (`auth()` + `redirect`), funciona hoy pero no es defensa en profundidad ante nuevas rutas fuera de ese layout group.
 - **Frontend no oculta UI según `isStaff`/`isSuperuser`** — el backend ya rechaza con 403 correctamente; es solo UX (controles que fallarían en vez de estar ocultos).
 - **`X-Frame-Options: SAMEORIGIN` como fallback legacy** en `FormularioCobroView` — deliberado, subordinado al CSP `frame-ancestors`, correcto.
 

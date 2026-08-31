@@ -42,7 +42,7 @@ export class AplicacionApiError extends Error {
 
   friendlyMessage(): string {
     if (this.status === 401 || this.status === 403) {
-      return "suit-frontend no esta autorizado a administrar aplicaciones (token de servicio invalido o ausente).";
+      return "suit-panel no esta autorizado a administrar aplicaciones (token de servicio invalido o ausente).";
     }
     return extractDrfMessage(this.detail) ?? "No se pudo completar la operacion. Verifica los datos ingresados.";
   }

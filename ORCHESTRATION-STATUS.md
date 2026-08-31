@@ -22,7 +22,7 @@ completo.
 suit_pagos/                    ← repo git único (historial nuevo desde b904c3d)
 ├── suit-orquestador/          ← Django/DRF — Orquestador (síncrono)
 ├── suit-conciliacion/         ← Django/DRF — Conciliación (asíncrono)
-├── suit-frontend/             ← Next.js — panel administrativo interno
+├── suit-panel/             ← Next.js — panel administrativo interno
 ├── suit-portal/               ← Next.js — Developer Portal
 ├── deploy/                    ← Dockerfiles + docker-compose.yml + .env (gitignored)
 ├── investigaciones/           ← ~14 research-*.md con evidencia técnica
@@ -54,7 +54,7 @@ comparten solo el repo git — decisión explícita del usuario.
 |---|---|---|
 | `suit-orquestador` | http://localhost:8001 | Swagger en `/api/docs/` |
 | `suit-conciliacion` | http://localhost:8002 | Swagger en `/api/docs/` |
-| `suit-frontend` | http://localhost:3000 | Login real funcionando |
+| `suit-panel` | http://localhost:3000 | Login real funcionando |
 | `suit-portal` | http://localhost:3001 | Formulario de registro conectado real |
 | RabbitMQ management | http://localhost:15672 | user/pass guest/guest |
 | Flower | http://localhost:5555 | Monitoreo Celery |
@@ -95,7 +95,7 @@ separados, solo `cd <carpeta> && claude -n <nombre>` dentro del monorepo.
 | `suit-backend` | `term_6f43dd56-ac78-40f7-8fe6-c4f59828b916` | `suit-orquestador/` | Backend Django Orquestador |
 | `expert_database_conciliacion` | `term_1480de12-12f5-4699-81dc-971764fcd84a` | `suit-conciliacion/` | Modelado de datos Conciliación |
 | `suit-conciliacion` | `term_20793c01-2e7e-49a4-be03-a358bc9a32cf` | `suit-conciliacion/` | Backend Django Conciliación |
-| `suit-frontend` | `term_c41a0859-9d4f-4a11-9dd2-034438880159` | `suit-frontend/` | Panel admin Next.js |
+| `suit-panel` | `term_c41a0859-9d4f-4a11-9dd2-034438880159` | `suit-panel/` | Panel admin Next.js |
 | `suit-portal` | `term_f18cbfff-1afc-4f1a-a543-c076a7f54a93` | `suit-portal/` | Developer Portal Next.js |
 
 **Nota:** `documentador` (creado ad-hoc, no está en esta tabla original) terminó
@@ -145,7 +145,7 @@ RabbitMQ real, permisos de staff (solo `is_staff` resuelve discrepancias).
 Encontró y corrigió 2 bugs reales de producción (colisión de nombres de cola
 Celery/RabbitMQ, migración de trigger nunca probada contra Postgres real).
 
-**`suit-frontend`** — login + Discrepancias + Eventos, verificado end-to-end
+**`suit-panel`** — login + Discrepancias + Eventos, verificado end-to-end
 contra el backend real (encontró y corrigió 4 desvíos reales del contrato:
 paginación DRF, auth de logout, rotación de refresh token, nombre de estado).
 
@@ -183,7 +183,7 @@ aislado, todos aparecieron al integrar de verdad).
 2. **Sentry** — sin DSN real conectado.
 3. **`suit-orquestador` sin auth JWT de usuario final** — solo
    `TokenAuthentication` para admin/M2M; decisión de que el panel
-   (`suit-frontend`) solo lee de Conciliación por ahora, no del Orquestador.
+   (`suit-panel`) solo lee de Conciliación por ahora, no del Orquestador.
 
 ## Comandos útiles para retomar
 

@@ -145,18 +145,18 @@ services:
     ports:
       - "5555:5555" # monitoreo de tareas Celery — solo dev/staging, sin auth propia
 
-  suit-frontend:
+  suit-panel:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.frontend
       args:
-        SERVICE_DIR: suit-frontend
+        SERVICE_DIR: suit-panel
       target: runner
     restart: unless-stopped
     depends_on:
       - suit-orquestador
       - suit-conciliacion
-    env_file: ../suit-frontend/.env
+    env_file: ../suit-panel/.env
     environment:
       CONCILIACION_API_URL: http://suit-conciliacion:8000
       NEXTAUTH_URL: http://localhost:3000

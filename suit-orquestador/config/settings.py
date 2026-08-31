@@ -105,7 +105,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Postgres es el motor real del Orquestador (trigger PL/pgSQL de transiciones de
 # estado, db-plan-pagos.md 2.2, y DECIMAL(19,2) para montos, sección 4) — y ahora
 # OBLIGATORIO, sin fallback a sqlite. El fallback anterior permitía correr
-# migraciones/tests contra sqlite sin darse cuenta (causó que suit-frontend
+# migraciones/tests contra sqlite sin darse cuenta (causó que suit-panel
 # corriera un smoke test contra sqlite local sin saberlo, con el trigger de
 # transición salteado por completo — ver migración 0002). Directiva del
 # usuario: las pruebas van siempre contra Postgres real, nunca sqlite.

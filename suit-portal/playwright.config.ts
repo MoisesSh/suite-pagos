@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // Nota: este portal todavía no tiene autenticación propia (es de cara al
-// desarrollador externo, sin login) — a diferencia del panel de suit-frontend,
+// desarrollador externo, sin login) — a diferencia del panel de suit-panel,
 // no hace falta fixture de sesión/storageState.
 export default defineConfig({
   testDir: "./e2e/specs",

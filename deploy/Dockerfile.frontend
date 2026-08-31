@@ -1,6 +1,6 @@
-# Dockerfile generico para los frontends Next.js (suit-frontend, suit-portal).
+# Dockerfile generico para los frontends Next.js (suit-panel, suit-portal).
 # Build context = raiz del monorepo. SERVICE_DIR selecciona el servicio:
-#   docker build -f deploy/Dockerfile.frontend --build-arg SERVICE_DIR=suit-frontend .
+#   docker build -f deploy/Dockerfile.frontend --build-arg SERVICE_DIR=suit-panel .
 #   docker build -f deploy/Dockerfile.frontend --build-arg SERVICE_DIR=suit-portal .
 
 # ────────────────────────────────────────

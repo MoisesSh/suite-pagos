@@ -24,11 +24,11 @@ services:
     volumes:
       - ../suit-conciliacion:/app
 
-  suit-frontend:
+  suit-panel:
     build:
       target: deps
     volumes:
-      - ../suit-frontend:/app
+      - ../suit-panel:/app
       - /app/node_modules
     command: npm run dev
     environment:

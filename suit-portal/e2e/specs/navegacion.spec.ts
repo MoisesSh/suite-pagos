@@ -15,7 +15,7 @@ test.describe("Navegación", () => {
     await expect(page).toHaveURL("/probar-iframe");
   });
 
-  test("no queda ningún enlace de registro de aplicaciones (se movió a suit-frontend)", async ({
+  test("no queda ningún enlace de registro de aplicaciones (se movió a suit-panel)", async ({
     page,
   }) => {
     await page.goto("/");

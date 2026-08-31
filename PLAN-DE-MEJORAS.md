@@ -1,7 +1,7 @@
 # Plan de Mejoras — Suite Centralizada de Pagos
 
 > Registro consolidado de todos los "bloques de próximo paso" que arman los agentes
-> de código (`suit-orquestador`, `suit-conciliacion`, `suit-frontend`, `suit-portal`)
+> de código (`suit-orquestador`, `suit-conciliacion`, `suit-panel`, `suit-portal`)
 > antes de recibir la orden de ejecución del coordinador. Se agrega un bloque nuevo
 > cada vez que un agente propone el siguiente incremento de trabajo.
 
@@ -44,11 +44,11 @@
 **Alcance — asignado a `suit-conciliacion`:**
 1. **`DEBUG` con default `True`** (`config/settings.py:20`) — cambiar default a `False`. Es la causa raíz de los puntos 2 y 3.
 2. **`CORS_ALLOW_ALL_ORIGINS` fail-open** (`settings.py:20,24-27`) — hoy se activa automáticamente si `DEBUG=True` y `CORS_ALLOWED_ORIGINS` vacío, junto con `CORS_ALLOW_CREDENTIALS=True`. Exigir `CORS_ALLOWED_ORIGINS` no vacío de forma independiente del valor de `DEBUG`.
-3. **Refresh token JWT expuesto también en el body JSON** (`apps/users/api/views.py:41-50,68-71`), además de la cookie HttpOnly — anula la protección HttpOnly a nivel de contrato. Fix: no incluir `refresh` en el body cuando ya se setea como cookie (confirmar primero con `suit-frontend` que no rompe su flujo actual, que sí lo consume del body — ver nota de coordinación abajo).
+3. **Refresh token JWT expuesto también en el body JSON** (`apps/users/api/views.py:41-50,68-71`), además de la cookie HttpOnly — anula la protección HttpOnly a nivel de contrato. Fix: no incluir `refresh` en el body cuando ya se setea como cookie (confirmar primero con `suit-panel` que no rompe su flujo actual, que sí lo consume del body — ver nota de coordinación abajo).
 4. **Cifrado de campos sensibles**: mismos campos que en suit-orquestador (`cedula_pagador`, `telefono_pagador`, `payload_crudo`), en `apps/conciliacion/domain/models.py:82-93,50`. Admin: `admin.py:35-39` no debería tener `telefono_pagador` en `search_fields`.
 5. **Catálogo `Banco` vacío en Docker** (hallazgo de `suit-backend`, no del research) — poblar seed con al menos `0102`/BDV, ya venía pendiente de la sesión anterior.
 
-**Nota de coordinación:** el punto 3 de este bloque (quitar `refresh` del body) puede romper a `suit-frontend` si su `authorize()` de NextAuth lo lee del body en vez de la cookie — coordinar con `suit-frontend` antes de mergear ese cambio puntual, no bloquear el resto del bloque por esto.
+**Nota de coordinación:** el punto 3 de este bloque (quitar `refresh` del body) puede romper a `suit-panel` si su `authorize()` de NextAuth lo lee del body en vez de la cookie — coordinar con `suit-panel` antes de mergear ese cambio puntual, no bloquear el resto del bloque por esto.
 
 ---
 
@@ -64,7 +64,7 @@ Quitar el fallback `:-guest` en `deploy/docker-compose.yml` (obligar la variable
 **Reutiliza el patrón outbox que ya existe** (mismo `EventoOutbox`/poller Celery beat del Bloque #6), no una tabla ni mecanismo nuevo desde cero — coherente con cómo ya se resolvió la entrega confiable hacia RabbitMQ.
 
 1. **`AplicacionRegistrada`**: dos campos nuevos, ambos opcionales (una app puede seguir sin webhook si no lo necesita todavía) —
-   - `webhook_url` (URLField, configurado por staff al registrar/editar la app — mismo CRUD admin del Bloque #7, que ahora pasa a `suit-frontend` por decisión aparte del usuario).
+   - `webhook_url` (URLField, configurado por staff al registrar/editar la app — mismo CRUD admin del Bloque #7, que ahora pasa a `suit-panel` por decisión aparte del usuario).
    - `webhook_secret` (generado automáticamente al setear `webhook_url`, nunca editable a mano — es la clave HMAC, mismo rol que el "signing secret" de Stripe).
 2. **`WebhookEntrega`** (modelo nuevo, 1:1 con cada `EventoOutbox` que tenga una `aplicacion` con `webhook_url` seteada): `evento` (FK), `intentos`, `estado` (`pendiente`/`entregado`/`agotado`), `ultimo_intento_at`, `ultima_respuesta_status`. Igual de campos a `EventoOutbox`, no un genérico reusable — evitar acoplar el mecanismo de RabbitMQ con el de HTTP.
 3. **Poller Celery beat nuevo** (mismo patrón que `OutboxRelayService`, tick fijo, `SELECT ... FOR UPDATE SKIP LOCKED`): por cada `WebhookEntrega` pendiente, `POST` el payload del evento (mismo JSON que ya viaja a RabbitMQ) al `webhook_url`, con header `X-Suit-Signature: sha256=<hmac_sha256(webhook_secret, body)>` — la app consumidora valida la firma antes de confiar en el payload (igual que Stripe/PayPal/Mercado Pago).
@@ -72,7 +72,7 @@ Quitar el fallback `:-guest` en `deploy/docker-compose.yml` (obligar la variable
 5. **Timeout corto por request** (ej. 5s) — nunca bloquear el poller esperando a un consumidor lento.
 6. Documentar en `GUIA-INTEGRACION-IFRAME.md` cómo validar la firma (ejemplo de código, mismo nivel de detalle que ya tiene el `postMessage`), y que el webhook es la fuente de verdad *primaria* — el `postMessage` queda como UX (redirigir/actualizar la pantalla más rápido), no como único mecanismo de confirmación.
 
-**No urgente / agendar sin bloquear lo anterior:** tokens DRF admin sin expiración (mitigado por permisos), inconsistencia SameSite Strict/Lax entre backend y Next.js, falta `middleware.ts` en suit-frontend como defensa en profundidad.
+**No urgente / agendar sin bloquear lo anterior:** tokens DRF admin sin expiración (mitigado por permisos), inconsistencia SameSite Strict/Lax entre backend y Next.js, falta `middleware.ts` en suit-panel como defensa en profundidad.
 
 ---
 
@@ -163,7 +163,7 @@ saludables, smoke test HTTP contra cada uno:
 |---|---|---|
 | `suit-orquestador` | `:8001/api/schema/` | 200 |
 | `suit-conciliacion` | `:8002/api/docs/` | 200 |
-| `suit-frontend` | `:3000` | 302 → `/login` (esperado, ruta protegida) |
+| `suit-panel` | `:3000` | 302 → `/login` (esperado, ruta protegida) |
 | `suit-portal` | `:3001` | 200 |
 | RabbitMQ management | `:15672` | 200 |
 | Flower | `:5555` | 200 |
@@ -209,7 +209,7 @@ verdad en Docker** (ninguno visible en desarrollo local, todos específicos del
 entorno containerizado):
 
 1. **NextAuth `UntrustedHost`** — Auth.js v5 detrás de Docker/proxy rechaza el
-   host por defecto. Fix: `AUTH_TRUST_HOST=true` en el entorno de `suit-frontend`.
+   host por defecto. Fix: `AUTH_TRUST_HOST=true` en el entorno de `suit-panel`.
 2. **`DisallowedHost` de Django** en ambos backends — `ALLOWED_HOSTS` no incluía
    los hostnames internos de Docker (`suit-orquestador`, `suit-conciliacion`).
    `suit-conciliacion` ya soportaba `ALLOWED_HOSTS` vía env; se agregó al
@@ -492,7 +492,7 @@ ejecutó primero en alcance reducido (cliente HTTP puro, desconectado del
 consumer) mientras `suit-orquestador` definía el contrato de `pago.confirmado`;
 conectado en un paso siguiente sin fricción (cambio de una línea en `tasks.py`).
 
-**Auto-auditoría:** tras el smoke test de `suit-frontend` (que encontró 4
+**Auto-auditoría:** tras el smoke test de `suit-panel` (que encontró 4
 desvíos reales del contrato), `suit-conciliacion` auditó su propia API contra
 esos 4 puntos — confirmó que su implementación ya era correcta en los cuatro
 casos; los "desvíos" eran imprecisiones de `CONTRATO-API-ACTUAL.md`, corregidas.
@@ -523,11 +523,11 @@ staff → 200/201.
 
 ---
 
-## `suit-frontend`
+## `suit-panel`
 
 ### Bloque #1 — Login + Discrepancias + Eventos ✅ COMPLETADO Y VERIFICADO E2E
 
-**Propuesto por:** `suit-frontend` · **Estado:** verificado contra backend real (commits `a800935`, `f96364e`)
+**Propuesto por:** `suit-panel` · **Estado:** verificado contra backend real (commits `a800935`, `f96364e`)
 
 **Alcance:** contra `CONTRATO-API-ACTUAL.md` (endpoints reales de `suit-conciliacion`):
 - Auth: NextAuth con relay manual de la cookie `refresh_token` HttpOnly
@@ -622,7 +622,7 @@ decisiones reales del proyecto:
 
 - `Dockerfile.backend` (genérico, `SERVICE_DIR` selecciona `suit-orquestador` o
   `suit-conciliacion`), `Dockerfile.celery-worker` (solo Conciliación),
-  `Dockerfile.frontend` (genérico, `suit-frontend`/`suit-portal`, usa `npm` no `pnpm`)
+  `Dockerfile.frontend` (genérico, `suit-panel`/`suit-portal`, usa `npm` no `pnpm`)
 - `docker-compose.yml`: 2 Postgres separados (`postgres-orquestador`,
   `postgres-conciliacion` — nunca un solo Postgres con schemas), 1 RabbitMQ
   (sin Redis), 4 servicios de aplicación + 1 worker Celery

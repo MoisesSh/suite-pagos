@@ -72,7 +72,7 @@ específico de cómo se usan acá — no la definición genérica de wikipedia.
   endpoints HTTP JSON usando DRF, la librería estándar para construir APIs REST
   sobre Django (serializers para validar/transformar datos, views para la
   lógica de request/response, permisos para controlar quién puede llamar qué).
-- **Next.js / App Router**: los 2 frontends (`suit-frontend`, `suit-portal`)
+- **Next.js / App Router**: los 2 frontends (`suit-panel`, `suit-portal`)
   son proyectos React usando Next.js con su "App Router" (el sistema de rutas
   moderno de Next.js, basado en carpetas dentro de `app/`, con Server
   Components y Server Actions — código que corre en el servidor Next.js, no en
@@ -157,7 +157,7 @@ específico de cómo se usan acá — no la definición genérica de wikipedia.
   requests desde el navegador a una API; CSRF protege contra que una página
   maliciosa haga que el navegador de un usuario logueado ejecute una acción sin
   que se dé cuenta. `suit-conciliacion` sí configura CORS explícitamente
-  (`django-cors-headers`, porque su panel `suit-frontend` es un cliente
+  (`django-cors-headers`, porque su panel `suit-panel` es un cliente
   separado en otro origen que necesita llamarlo desde el navegador).
   `suit-orquestador` **no tiene CORS configurado** — decisión consciente,
   porque sus endpoints públicos no dependen de cookies de sesión de navegador
@@ -173,7 +173,7 @@ específico de cómo se usan acá — no la definición genérica de wikipedia.
 suit_pagos/                    ← monorepo, un solo repo git
 ├── suit-orquestador/          ← Django/DRF — cobro C2P (síncrono)
 ├── suit-conciliacion/         ← Django/DRF — conciliación bancaria (asíncrono)
-├── suit-frontend/             ← Next.js — panel administrativo interno (staff)
+├── suit-panel/             ← Next.js — panel administrativo interno (staff)
 ├── suit-portal/               ← Next.js — Developer Portal (para equipos externos)
 └── deploy/                    ← Dockerfiles + docker-compose.yml (orquesta los 4 + infra)
 ```
@@ -196,7 +196,7 @@ propio repo si hiciera falta.
   masivo de historial) **nunca pueda degradar la latencia de un cobro real en
   curso**. Si compartieran proceso o base de datos, esa garantía no sería
   real, sería solo una convención de equipo.
-- **Frontend vs Portal**: `suit-frontend` es para el staff interno de Conatel
+- **Frontend vs Portal**: `suit-panel` es para el staff interno de Conatel
   (login con usuario/contraseña, ve discrepancias y eventos). `suit-portal` es
   para los equipos de las apps consumidoras — no requiere login propio hoy
   (ver gaps, sección 5), sirve para registrar su aplicación/dominio y probar la
@@ -277,7 +277,7 @@ flowchart LR
         DBC[("Postgres\nconciliacion_pagos")]
     end
 
-    subgraph Panel["suit-frontend (Next.js)"]
+    subgraph Panel["suit-panel (Next.js)"]
         UI1["Panel staff"]
     end
 
@@ -305,7 +305,7 @@ flowchart LR
 
 Puntos clave del diagrama: el Orquestador **nunca llama directamente** a
 Conciliación (ni al revés) — la única conexión es a través de RabbitMQ. El
-panel (`suit-frontend`) **solo lee de Conciliación**, nunca del Orquestador
+panel (`suit-panel`) **solo lee de Conciliación**, nunca del Orquestador
 (decisión de alcance: hoy no hay ninguna vista del panel que necesite datos
 crudos de pagos en curso). El Developer Portal (`suit-portal`) sí habla con el
 Orquestador (para registrar apps y para la página de prueba del iframe).
@@ -406,7 +406,7 @@ resultado interpretado a un tipo/severidad de `Discrepancia` (ej.
 `NO_ENCONTRADO`→severidad media, `MONTO_NO_COINCIDE`→alta,
 `ERROR_CREDENCIALES`→crítica) y, si corresponde, crea la fila — queda
 `abierta`, esperando que un miembro del staff la revise desde el panel
-(`suit-frontend`) y la marque `resuelta`/`descartada`/`en_revision`. Solo
+(`suit-panel`) y la marque `resuelta`/`descartada`/`en_revision`. Solo
 usuarios `is_staff` pueden resolver; cualquier autenticado puede consultar.
 
 Este flujo completo fue **verificado en vivo contra infraestructura real** al
@@ -565,7 +565,7 @@ mecanismo de debounce de 30 segundos hacia BDV en este subproyecto — si existe
 como expectativa de diseño, no está implementado en el código actual de
 `suit-conciliacion`.
 
-### 4.3 `suit-frontend` — panel administrativo interno
+### 4.3 `suit-panel` — panel administrativo interno
 
 Next.js 16 / React 19, App Router, patrón Feature-Sliced/Onion dentro de
 `src/modules/`. Autenticación con **NextAuth v5 (Auth.js)**: login contra
@@ -633,7 +633,7 @@ para conectar un cliente SQL desde el host), `rabbitmq` (con management UI en
 `:15672` y el archivo `rabbitmq.conf` que resuelve el problema del error 541
 descrito arriba), `flower` (monitoreo de Celery en `:5555`, sin auth propia —
 solo dev/staging), y los 4 servicios de aplicación
-(`suit-orquestador:8001`, `suit-conciliacion:8002`, `suit-frontend:3000`,
+(`suit-orquestador:8001`, `suit-conciliacion:8002`, `suit-panel:3000`,
 `suit-portal:3001`) más un worker Celery dedicado de Conciliación. Solo
 Conciliación tiene worker Celery propio corriendo en un contenedor separado —
 el relay del Orquestador es un poller que corre dentro de su propio proceso
@@ -688,7 +688,7 @@ el frontend).
    implementa, pero no hay ningún servicio/endpoint que lo orqueste todavía.
 5. **`transacciones-ledger` (detail) en el panel**: domain/application listos,
    falta el repositorio concreto, la server action, y toda la UI.
-6. **Sin tests automatizados en `suit-frontend`** (verificación hecha
+6. **Sin tests automatizados en `suit-panel`** (verificación hecha
    manualmente contra el backend real).
 7. **El publisher del relay outbox no usa el flag `mandatory` de AMQP**: no
    hay forma de detectar un mensaje no enrutado — un `EventoOutbox` puede

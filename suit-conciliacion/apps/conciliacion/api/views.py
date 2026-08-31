@@ -22,7 +22,12 @@ class DiscrepanciaListView(generics.ListAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return Discrepancia.objects.none()
 
-        queryset = Discrepancia.objects.select_related('resuelto_por').order_by('-created_at')
+        queryset = (
+            Discrepancia.objects
+            .select_related('resuelto_por', 'evento')
+            .prefetch_related('evento__transacciones_ledger')
+            .order_by('-created_at')
+        )
         estado_resolucion = self.request.query_params.get('estado_resolucion')
         severidad = self.request.query_params.get('severidad')
         if estado_resolucion:
@@ -70,7 +75,7 @@ class EventoPagoRecibidoListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return EventoPagoRecibido.objects.none()
-        return EventoPagoRecibido.objects.order_by('-created_at')
+        return EventoPagoRecibido.objects.prefetch_related('transacciones_ledger').order_by('-created_at')
 
 
 class TransaccionLedgerListView(generics.ListAPIView):

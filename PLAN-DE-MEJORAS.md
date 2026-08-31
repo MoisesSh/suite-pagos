@@ -9,6 +9,91 @@
 
 ---
 
+## Bloque #22 — Conectar anulación de cobro (`anular()`) al flujo real 🔄 PROPUESTO
+
+**Origen:** auditoría de flujos huérfanos del agente `research`, tras encontrar
+el mismo patrón que el ledger (Bloques #20/#21): infraestructura completa,
+testeada, nunca invocada desde el flujo real. Severidad ALTA — dinero real
+involucrado, hoy no hay forma de anular un cobro erróneo.
+
+**Hallazgo:** `bdv_c2p.py` implementa `anular()` completo con test, el puerto
+del adaptador lo declara, y los modelos `Anulacion`/`Reembolso` existen (hasta
+en el admin de Django) — pero `FlujoCobroC2PService` nunca los invoca ni los
+crea. No existe ningún endpoint, vista, ni acción que dispare una anulación
+real hoy.
+
+**Decisiones de negocio ya cerradas por el usuario:**
+- Solo staff de Conatel puede pedir la anulación por ahora (sin endpoint
+  público para apps consumidoras — mismo criterio `IsAdminUser` ya usado para
+  resolver discrepancias/CRUD de apps). Se dispara desde `suit-panel`.
+- Sin ventana de tiempo propia — se intenta contra BDV siempre, y si el banco
+  la rechaza por estar fuera de su propia ventana, se propaga ese error tal
+  cual (mismo patrón ya usado con el resto de códigos de respuesta del
+  proveedor).
+
+**Alcance — asignado a `suit-backend`:**
+1. Confirmar el contrato real de `anular()` en `bdv_c2p.py` (qué pide BDV
+   exactamente — referencia, campos) y el modelo `Anulacion` existente antes
+   de tocar nada.
+2. Endpoint nuevo `POST /api/autorizacion/admin/pagos/<uuid:id>/anular/` (o
+   ruta similar bajo el mismo namespace admin ya existente), protegido con
+   `TokenAuthentication` + `IsAdminUser` (mismo patrón que el CRUD de apps).
+3. `FlujoCobroC2PService.anular_cobro(...)` (nuevo método): llama al
+   adaptador `anular()`, crea `Anulacion` si BDV confirma, propaga el error
+   del proveedor tal cual si rechaza (incluida la ventana de tiempo del
+   banco).
+4. Publicar o no un evento `pago.anulado` hacia Conciliación (mismo patrón
+   outbox del contrato `pago.confirmado`): a criterio técnico del agente,
+   proponer antes de ejecutar si conviene ahora o diferirlo — no es una
+   decisión de negocio, es alcance/tamaño del bloque.
+5. Tests de integración real (mismo patrón del proyecto — contra BDV QA, no
+   mocks del adaptador para el camino principal) + test que confirme que solo
+   `IsAdminUser` puede llegar al endpoint.
+
+---
+
+## Bloque #23 — Falta navegación hacia el detalle del ledger en `suit-panel` 🔄 PROPUESTO
+
+**Origen:** auditoría de flujos huérfanos del agente `research`. Severidad
+MEDIA — gap de navegación, no de backend (la vista y el fetch ya funcionan).
+
+**Hallazgo:** `/transacciones-ledger/[id]` (Server Action → API real) está
+bien conectada de punta a punta, pero no existe ningún `<Link>` en toda la UI
+que apunte ahí — solo es alcanzable tecleando el UUID a mano en la URL. Con el
+Bloque #21 ya generando transacciones reales, hay datos reales que hoy nadie
+puede ver navegando.
+
+**Alcance — asignado a `suit-panel`:**
+1. Agregar navegación real hacia el detalle del ledger. Como no hay endpoint
+   de listado de `TransaccionLedger` expuesto en el nav principal, la opción
+   más simple: un listado nuevo en `/transacciones-ledger` (ya existe el
+   endpoint de listado del Bloque #20, `GET /transacciones-ledger/?aplicacion_id=`)
+   con link a cada detalle — mismo patrón que `discrepancias`/`eventos`.
+2. Alternativa más liviana si el usuario prefiere no armar una pantalla nueva:
+   agregar el link solo desde discrepancias/eventos cuando esa fila tenga una
+   transacción de ledger asociada (`Discrepancia.evento` → transacción, si
+   existe). Confirmar con el usuario cuál de las dos alcanza para esta
+   iteración.
+3. Tests (Playwright, patrón ya usado en el proyecto): navegación real
+   click-through hasta el detalle, no solo unit del componente.
+
+**Ejecutado (parcial, backend — `suit-conciliacion`):** para la opción 2, se
+expone `transaccion_ledger_id` (SerializerMethodField, vía
+`evento.transacciones_ledger.first()`) en `DiscrepanciaSerializer` y
+`EventoPagoRecibidoSerializer`, con `select_related`/`prefetch_related` en
+`DiscrepanciaListView`/`EventoPagoRecibidoListView` para evitar N+1. Tests
+nuevos en `test_discrepancias.py` y `test_eventos.py` (con/sin transacción
+asociada, evento nulo). Nota de coordinación: este cambio lo empezó a hacer
+`suit-panel` editando el repo de `suit-conciliacion` directamente sin
+autorización — el coordinador lo interrumpió; `suit-conciliacion` revisó el
+diseño (razonable), lo corrigió (un bug real: los tests comparaban el UUID
+crudo devuelto por `response.data` contra su forma string) y lo commiteó como
+propio. `suit-panel` debe limitarse a consumir este campo desde ahora — la
+navegación real (`<Link>` desde discrepancias/eventos) sigue pendiente, en su
+alcance.
+
+---
+
 ## Bloque #21 — Conectar LedgerService al flujo real (pago conciliado) ✅ COMPLETADO (suit-conciliacion)
 
 **Origen:** desbloqueado — el usuario definió el plan de cuentas que faltaba

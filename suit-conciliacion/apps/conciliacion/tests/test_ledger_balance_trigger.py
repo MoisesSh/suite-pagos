@@ -32,7 +32,9 @@ class LedgerBalanceTriggerTests(TransactionTestCase):
 
     def test_transaccion_balanceada_se_guarda_sin_error(self):
         with transaction.atomic():
-            transaccion = TransaccionLedger.objects.create(referencia_evento=self.evento)
+            transaccion = TransaccionLedger.objects.create(
+                referencia_evento=self.evento, aplicacion_id=self.evento.payload['aplicacion_id'],
+            )
             LineaLedger.objects.create(
                 transaccion=transaccion, cuenta=self.cuenta_debito,
                 tipo=LineaLedger.Tipo.DEBITO, monto=Decimal('100.00'),
@@ -50,7 +52,9 @@ class LedgerBalanceTriggerTests(TransactionTestCase):
         # recién al salir del `with transaction.atomic()`, no en el segundo create().
         with self.assertRaises(DatabaseError):
             with transaction.atomic():
-                transaccion = TransaccionLedger.objects.create(referencia_evento=self.evento)
+                transaccion = TransaccionLedger.objects.create(
+                    referencia_evento=self.evento, aplicacion_id=self.evento.payload['aplicacion_id'],
+                )
                 LineaLedger.objects.create(
                     transaccion=transaccion, cuenta=self.cuenta_debito,
                     tipo=LineaLedger.Tipo.DEBITO, monto=Decimal('100.00'),

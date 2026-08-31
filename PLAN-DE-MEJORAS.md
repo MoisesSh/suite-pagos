@@ -9,6 +9,58 @@
 
 ---
 
+## Bloque #20 — Trazabilidad de aplicación de origen en el ledger ✅ COMPLETADO (suit-conciliacion)
+
+**Origen:** pedido del usuario — necesita saber de qué aplicación consumidora
+viene cada transacción del ledger, no solo el débito/crédito contable.
+
+**Hallazgo previo, no atribuible a este pedido:** `LedgerService.registrar_transaccion`
+existe (líneas balanceadas, trigger de balance-cero en Postgres) pero **nunca se
+invoca desde el flujo real** — `MatchingService.procesar_respuesta_bdv` solo crea
+`ConsultaConciliacionProveedor` + `Discrepancia` cuando algo no concilia; el caso
+`CONCILIADO` (pago exitoso) no dispara ninguna `TransaccionLedger` hoy. No hay una
+sola fila real en esa tabla en producción. `CuentaContable` tampoco tiene seed.
+
+**Alcance de este bloque — asignado a `suit-conciliacion`:**
+1. `TransaccionLedger`: nuevo campo `aplicacion_id` (`UUIDField`, sin FK real —
+   mismo patrón cross-service que `AplicacionRegistrada.app_origen_id` del
+   Orquestador; database-per-service, nunca FK entre las dos bases), `db_index=True`.
+2. `LedgerService.registrar_transaccion` deja de depender de que el caller pase
+   `aplicacion_id` aparte — lo extrae automáticamente de `evento.payload['aplicacion_id']`
+   (ya viaja en el contrato `pago.confirmado`, `investigaciones/contrato-evento-pago-confirmado.md`,
+   solo que hoy nadie lo lee del lado de Conciliación).
+3. Exponer `aplicacion_id` en `TransaccionLedgerSerializer` (ya consumido por
+   `suit-panel` en `/transacciones-ledger/[id]`).
+4. Agregar un endpoint de **listado** de `TransaccionLedger` con filtro
+   `?aplicacion_id=` (hoy solo existe `GET /transacciones-ledger/<uuid:pk>/`,
+   detalle puntual — no hay forma de listar/reportar por app todavía).
+5. **Sin catálogo de nombres de app** — decisión explícita del usuario (YAGNI):
+   se guarda y expone el UUID crudo, resolver el nombre legible queda para
+   cuando haya un reporte real que lo necesite.
+
+**Explícitamente FUERA de este bloque, bloqueado por decisión de negocio:**
+conectar `LedgerService.registrar_transaccion` al camino `CONCILIADO` de
+`MatchingService` (el hallazgo previo de arriba) requiere que el usuario defina
+con su equipo de contabilidad **qué cuentas contables** (débito/crédito) usar
+para el asiento de un cobro conciliado — no se inventa un plan de cuentas sin
+esa decisión. Sin ese wiring, el `aplicacion_id` de este bloque queda listo
+en el modelo pero sin datos reales que poblarlo hasta que se resuelva aparte.
+
+**Ejecutado:** migración `0007_transaccionledger_aplicacion_id.py` (campo
+no-nulleable, `db_index=True`, sin default en el modelo — tabla vacía en
+producción); `LedgerService.registrar_transaccion` ahora extrae
+`aplicacion_id` de `evento.payload['aplicacion_id']`; `TransaccionLedgerSerializer`
+lo expone; nuevo `GET /api/conciliacion/transacciones-ledger/` (listado,
+filtro `?aplicacion_id=`, mismo patrón que `discrepancias/`/`eventos/`) además
+del detalle existente por `pk`. Tests nuevos en
+`apps/conciliacion/tests/test_ledger.py` (service + listado) y factory
+`crear_evento_pago` actualizada para incluir `aplicacion_id` en el payload
+default. 51/51 tests OK corridos en el contenedor Docker real. El wiring a
+`MatchingService` sigue explícitamente fuera de alcance, bloqueado según lo
+descrito arriba.
+
+---
+
 ## Bloque #19 — Fix: registro/listado de aplicaciones no funcionaba en Docker (ECONNREFUSED) ✅ COMPLETADO (coordinador)
 
 **Reportado por:** usuario (probando el panel real, "no registra las apps autorizadas").

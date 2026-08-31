@@ -143,6 +143,12 @@ class TransaccionLedger(BaseModel):
     referencia_evento = models.ForeignKey(
         EventoPagoRecibido, on_delete=models.PROTECT, related_name='transacciones_ledger',
     )
+    # Sin FK real: Conciliación y Orquestador corren en bases Postgres separadas
+    # (database-per-service), una FK cruzada entre bases no es técnicamente
+    # posible. Mismo patrón que AplicacionRegistrada.app_origen_id del lado del
+    # Orquestador. Se extrae de evento.payload['aplicacion_id'] al registrar la
+    # transacción (ver LedgerService.registrar_transaccion).
+    aplicacion_id = models.UUIDField(db_index=True)
 
     class Meta:
         verbose_name = 'Transacción de ledger'

@@ -73,6 +73,21 @@ class EventoPagoRecibidoListView(generics.ListAPIView):
         return EventoPagoRecibido.objects.order_by('-created_at')
 
 
+class TransaccionLedgerListView(generics.ListAPIView):
+    serializer_class = TransaccionLedgerSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return TransaccionLedger.objects.none()
+
+        queryset = TransaccionLedger.objects.prefetch_related('lineas', 'lineas__cuenta').order_by('-created_at')
+        aplicacion_id = self.request.query_params.get('aplicacion_id')
+        if aplicacion_id:
+            queryset = queryset.filter(aplicacion_id=aplicacion_id)
+        return queryset
+
+
 class TransaccionLedgerDetailView(generics.RetrieveAPIView):
     serializer_class = TransaccionLedgerSerializer
     permission_classes = [IsAuthenticated]

@@ -44,7 +44,7 @@ def crear_evento_pago(**overrides):
     defaults = {
         'event_id': uuid.uuid4(),
         'event_type': 'pago.confirmado',
-        'payload': {'monto': '120.00'},
+        'payload': {'monto': '120.00', 'aplicacion_id': str(uuid.uuid4())},
         'schema_version': 1,
     }
     defaults.update(overrides)

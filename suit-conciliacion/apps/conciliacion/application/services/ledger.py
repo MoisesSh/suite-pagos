@@ -10,10 +10,14 @@ class LedgerService:
     @staticmethod
     @transaction.atomic
     def registrar_transaccion(evento, lineas):
-        """`lineas` es una lista de dicts: {'cuenta': CuentaContable, 'tipo': 'debito'|'credito', 'monto': Decimal}."""
+        """`lineas` es una lista de dicts: {'cuenta': CuentaContable, 'tipo': 'debito'|'credito', 'monto': Decimal}.
+        `aplicacion_id` se extrae de `evento.payload['aplicacion_id']` (viaja en el
+        contrato `pago.confirmado`, ver investigaciones/contrato-evento-pago-confirmado.md)."""
         from apps.conciliacion.domain.models import LineaLedger, TransaccionLedger
 
-        transaccion = TransaccionLedger.objects.create(referencia_evento=evento)
+        transaccion = TransaccionLedger.objects.create(
+            referencia_evento=evento, aplicacion_id=evento.payload['aplicacion_id'],
+        )
         LineaLedger.objects.bulk_create([
             LineaLedger(transaccion=transaccion, **linea) for linea in lineas
         ])

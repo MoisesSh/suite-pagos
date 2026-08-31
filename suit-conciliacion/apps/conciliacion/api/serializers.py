@@ -51,5 +51,5 @@ class TransaccionLedgerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TransaccionLedger
-        fields = ['id', 'referencia_evento', 'created_at', 'lineas']
+        fields = ['id', 'referencia_evento', 'aplicacion_id', 'created_at', 'lineas']
         read_only_fields = fields

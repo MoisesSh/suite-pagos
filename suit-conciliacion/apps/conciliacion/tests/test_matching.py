@@ -6,7 +6,7 @@ from django.utils import timezone
 from apps.conciliacion.application.services.matching import MatchingService
 from apps.conciliacion.domain import bdv
 from apps.conciliacion.domain.models import ConsultaConciliacionProveedor as CCP
-from apps.conciliacion.domain.models import Discrepancia
+from apps.conciliacion.domain.models import Discrepancia, LineaLedger, TransaccionLedger
 from apps.shared.tests import factories
 
 
@@ -70,6 +70,16 @@ class ProcesarRespuestaBdvTests(TestCase):
     def setUp(self):
         self.evento = factories.crear_evento_pago()
         self.banco_bdv = factories.crear_banco(codigo='0102', nombre='Banco de Venezuela')
+        # Bloque #21: plan de cuentas del asiento de un cobro conciliado (ver
+        # migración 0008_seed_cuentas_ledger.py) — se crean explícito por
+        # factory en vez de depender del seed de la migración, mismo criterio
+        # ya usado para Banco en esta clase.
+        self.cuenta_debito = factories.crear_cuenta_contable(
+            codigo=MatchingService.CODIGO_CUENTA_DEBITO_TERCEROS, nombre='Cuentas por Cobrar a Terceros',
+        )
+        self.cuenta_credito = factories.crear_cuenta_contable(
+            codigo=MatchingService.CODIGO_CUENTA_CREDITO_CONATEL, nombre='Ingresos por Cobro de Terceros',
+        )
 
     @staticmethod
     def _respuesta(code, message, data=None):
@@ -97,6 +107,36 @@ class ProcesarRespuestaBdvTests(TestCase):
 
         self.assertEqual(consulta.resultado_interpretado, CCP.ResultadoInterpretado.CONCILIADO)
         self.assertFalse(Discrepancia.objects.filter(consulta=consulta).exists())
+
+    def test_pago_conciliado_registra_transaccion_ledger_balanceada(self):
+        """Test end-to-end (Bloque #21): un pago que concilia de verdad deja una
+        TransaccionLedger real con 2 líneas balanceadas y aplicacion_id poblado —
+        antes de este bloque, el camino CONCILIADO no generaba nada downstream."""
+        respuesta = self._respuesta(1000, 'Monto: 120.00 - estatus: Transacción realizada', {
+            'status': '1000', 'amount': '120.00', 'reason': 'Transacción realizada', 'referencia': '12345678',
+        })
+
+        self._procesar(self.banco_bdv, respuesta)
+
+        transaccion = TransaccionLedger.objects.get(referencia_evento=self.evento)
+        self.assertEqual(str(transaccion.aplicacion_id), self.evento.payload['aplicacion_id'])
+
+        lineas = list(transaccion.lineas.all())
+        self.assertEqual(len(lineas), 2)
+
+        linea_debito = transaccion.lineas.get(tipo=LineaLedger.Tipo.DEBITO)
+        linea_credito = transaccion.lineas.get(tipo=LineaLedger.Tipo.CREDITO)
+        self.assertEqual(linea_debito.cuenta, self.cuenta_debito)
+        self.assertEqual(linea_credito.cuenta, self.cuenta_credito)
+        self.assertEqual(linea_debito.monto, Decimal('120.00'))
+        self.assertEqual(linea_credito.monto, Decimal('120.00'))
+
+    def test_resultado_no_conciliado_no_genera_transaccion_ledger(self):
+        respuesta = self._respuesta(1010, 'No se pudo validar el movimiento : Registro solicitado no existe')
+
+        self._procesar(self.banco_bdv, respuesta)
+
+        self.assertFalse(TransaccionLedger.objects.filter(referencia_evento=self.evento).exists())
 
     def test_no_encontrado_genera_discrepancia_sin_movimiento_bancario(self):
         respuesta = self._respuesta(1010, 'No se pudo validar el movimiento : Registro solicitado no existe')

@@ -7,6 +7,14 @@ class MatchingService:
     es un match limpio. Nunca falla en silencio: todo resultado distinto de
     `conciliado` queda registrado como discrepancia (ver db-plan-pagos.md §3.4)."""
 
+    # Bloque #21 (PLAN-DE-MEJORAS.md): plan de cuentas definido por el usuario.
+    # Conatel es destinatario final del dinero (no hay liquidación pendiente hacia
+    # la app afiliada) — una sola cuenta genérica de terceros para todos los
+    # pagadores, sin trazabilidad contable por pagador individual. Sembradas en
+    # la migración 0008_seed_cuentas_ledger.py.
+    CODIGO_CUENTA_DEBITO_TERCEROS = 'CXC-TERCEROS'
+    CODIGO_CUENTA_CREDITO_CONATEL = 'ING-COBRO-TERCEROS'
+
     # resultado_interpretado -> tipo de Discrepancia (None = no genera discrepancia)
     _MAPA_DISCREPANCIA = None
 
@@ -80,19 +88,39 @@ class MatchingService:
 
         consulta = ConsultaConciliacionProveedor.objects.create(evento=evento, banco=banco, **datos)
 
-        mapa = cls._mapa_discrepancia()
-        entrada = mapa.get(consulta.resultado_interpretado)
-        if entrada is not None:
-            tipo, severidad = entrada
-            Discrepancia.objects.create(
-                consulta=consulta,
-                evento=evento,
-                tipo=tipo,
-                severidad=severidad,
-                estado_resolucion=Discrepancia.EstadoResolucion.ABIERTA,
-            )
+        if consulta.resultado_interpretado == ConsultaConciliacionProveedor.ResultadoInterpretado.CONCILIADO:
+            cls._registrar_ledger_conciliado(evento, consulta)
+        else:
+            mapa = cls._mapa_discrepancia()
+            entrada = mapa.get(consulta.resultado_interpretado)
+            if entrada is not None:
+                tipo, severidad = entrada
+                Discrepancia.objects.create(
+                    consulta=consulta,
+                    evento=evento,
+                    tipo=tipo,
+                    severidad=severidad,
+                    estado_resolucion=Discrepancia.EstadoResolucion.ABIERTA,
+                )
 
         return consulta
+
+    @classmethod
+    def _registrar_ledger_conciliado(cls, evento, consulta):
+        """Asiento de doble entrada de un cobro conciliado (Bloque #21). Débito a la
+        cuenta genérica de terceros (dinero del pagador de la app afiliada), crédito a
+        la cuenta de ingresos propios de Conatel — destinatario final del dinero, no una
+        liquidación pendiente hacia la app afiliada."""
+        from apps.conciliacion.application.services.ledger import LedgerService
+        from apps.conciliacion.domain.models import CuentaContable, LineaLedger
+
+        cuenta_debito = CuentaContable.objects.get(codigo=cls.CODIGO_CUENTA_DEBITO_TERCEROS)
+        cuenta_credito = CuentaContable.objects.get(codigo=cls.CODIGO_CUENTA_CREDITO_CONATEL)
+        lineas = [
+            {'cuenta': cuenta_debito, 'tipo': LineaLedger.Tipo.DEBITO, 'monto': consulta.importe_esperado},
+            {'cuenta': cuenta_credito, 'tipo': LineaLedger.Tipo.CREDITO, 'monto': consulta.importe_esperado},
+        ]
+        LedgerService.registrar_transaccion(evento, lineas)
 
     @staticmethod
     @transaction.atomic

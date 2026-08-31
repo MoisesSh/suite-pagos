@@ -9,6 +9,63 @@
 
 ---
 
+## Bloque #21 — Conectar LedgerService al flujo real (pago conciliado) ✅ COMPLETADO (suit-conciliacion)
+
+**Origen:** desbloqueado — el usuario definió el plan de cuentas que faltaba
+(ver Bloque #20, sección "fuera de alcance"). Decisión de negocio ya cerrada:
+
+- **Débito** → cuenta genérica **"Cuentas por Cobrar a Terceros"** (representa
+  el dinero que viene del pagador/cliente de la app afiliada).
+- **Crédito** → cuenta **"Ingresos por Cobro de Terceros"** (Conatel es
+  destinatario final del dinero — ingreso propio, no una liquidación pendiente
+  hacia la app afiliada; el `aplicacion_id` del Bloque #20 es solo para
+  reportería/segmentación, no representa una cuenta por pagar a esa app).
+- Sin trazabilidad contable por pagador individual — una sola cuenta genérica
+  de terceros para todos los pagadores, la identidad puntual del pagador ya
+  vive en `ConsultaConciliacionProveedor`/el evento, no en el plan de cuentas.
+
+**Alcance — asignado a `suit-conciliacion`:**
+1. Migración de datos: seed de `CuentaContable` con las 2 cuentas de arriba
+   (códigos a definir por el agente, sin convención numérica establecida
+   todavía — simple, ej. `CXC-TERCEROS` / `ING-COBRO-TERCEROS`).
+2. `MatchingService.procesar_respuesta_bdv` (o `registrar_resultado_consulta`,
+   el punto exacto donde se resuelve `resultado_interpretado == CONCILIADO`):
+   agregar la llamada a `LedgerService.registrar_transaccion(evento, lineas)`
+   con las 2 líneas balanceadas (débito cuenta terceros, crédito cuenta
+   Conatel, mismo `monto` del pago) — hoy el caso `CONCILIADO` no genera
+   ningún registro downstream (ni discrepancia ni ledger, confirmado al
+   usuario en esta sesión).
+3. Verificar que `aplicacion_id` (Bloque #20) se siga poblando correctamente
+   en este camino real (ya lo hace automáticamente vía `evento.payload`, solo
+   confirmar con un test de integración real, no solo unitario).
+4. Test end-to-end: un pago que concilia de verdad debe dejar una
+   `TransaccionLedger` con 2 `LineaLedger` balanceadas y `aplicacion_id`
+   poblado — no solo la `ConsultaConciliacionProveedor` que ya se creaba antes.
+
+**Fuera de alcance:** comisiones del banco, reembolsos/anulaciones (no hay
+contrato de evento para esos casos todavía), liquidación/transferencia real a
+las apps afiliadas (no aplica — Conatel es destinatario final, según la
+decisión de arriba).
+
+**Ejecutado:** migración `0008_seed_cuentas_ledger.py` (mismo patrón que
+`0005_seed_banco_bdv.py`) siembra `CXC-TERCEROS` (Cuentas por Cobrar a
+Terceros) e `ING-COBRO-TERCEROS` (Ingresos por Cobro de Terceros), verificado
+en Postgres real. `MatchingService.registrar_resultado_consulta` ahora
+distingue el caso `CONCILIADO`: en vez de solo saltarse el mapa de
+discrepancias, llama a `_registrar_ledger_conciliado` → `LedgerService.registrar_transaccion`
+con las 2 líneas balanceadas (débito terceros / crédito Conatel, mismo
+`importe_esperado`) dentro del mismo `@transaction.atomic` ya existente —
+`aplicacion_id` sigue poblándose solo, vía `evento.payload` (Bloque #20), sin
+tocar ese wiring. Tests nuevos en `test_matching.py`:
+`test_pago_conciliado_registra_transaccion_ledger_balanceada` (end-to-end real
+— `TransaccionLedger` con 2 `LineaLedger` balanceadas + `aplicacion_id`) y
+`test_resultado_no_conciliado_no_genera_transaccion_ledger` (no rompe el
+camino de discrepancias existente). 53/53 tests OK en el contenedor Docker
+real. Comisiones/reembolsos/liquidación a apps afiliadas siguen fuera de
+alcance, sin tocar.
+
+---
+
 ## Bloque #20 — Trazabilidad de aplicación de origen en el ledger ✅ COMPLETADO (suit-conciliacion)
 
 **Origen:** pedido del usuario — necesita saber de qué aplicación consumidora

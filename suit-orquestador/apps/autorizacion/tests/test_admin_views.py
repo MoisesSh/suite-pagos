@@ -1,9 +1,21 @@
 import uuid
+from decimal import Decimal
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from rest_framework.authtoken.models import Token
 
-from apps.autorizacion.domain.models import AplicacionProveedorPermitido, AplicacionRegistrada, MedioPago, ProveedorPago
+from apps.autorizacion.application.services import FlujoCobroC2PService
+from apps.autorizacion.domain.errores_proveedor import ProveedorPagoError, ProveedorPagoIndisponibleError
+from apps.autorizacion.domain.models import (
+    Anulacion,
+    AplicacionProveedorPermitido,
+    AplicacionRegistrada,
+    IntencionPago,
+    MedioPago,
+    ProveedorPago,
+)
+from apps.autorizacion.domain.puertos_pago import PaymentProviderPort, ResultadoCobro
 from apps.autorizacion.tests.base import BaseAPITestCase
 
 User = get_user_model()
@@ -170,3 +182,88 @@ class AdminAplicacionActivarViewTests(_ConTokenDeStaff):
         self.aplicacion.refresh_from_db()
         self.assertEqual(self.aplicacion.webhook_url, 'https://ya-configurado.gob.ve/hook')
         self.assertEqual(self.aplicacion.webhook_secret, secret_original)
+
+
+class AdminAnularPagoViewTests(_ConTokenDeStaff):
+    def setUp(self):
+        super().setUp()
+        self.aplicacion = AplicacionRegistrada.objects.create(nombre='Conatel en Línea', app_origen_id=uuid.uuid4())
+        self.pago = FlujoCobroC2PService.iniciar(
+            aplicacion=self.aplicacion, monto=Decimal('1000.60'), moneda_codigo='VES',
+        )
+        adaptador_cobro = Mock(spec=PaymentProviderPort)
+        adaptador_cobro.procesar_cobro.return_value = ResultadoCobro(
+            codigo='1000', mensaje='Proceso finalizado', referencia_corta='090037579602',
+            identificador_interbancario='0102010298400079090940416589264220251114162931090620472770',
+            payload_crudo={'code': '1000'},
+        )
+        FlujoCobroC2PService.ejecutar_cobro(
+            self.pago, adaptador=adaptador_cobro, cedula_pagador='V12345678', telefono_pagador='04125692243',
+            banco_codigo='0102', concepto='Pago', otp='5551111', telefono_comercio='04140282647',
+        )
+        self.pago.refresh_from_db()
+
+    def _url(self):
+        return f'/api/autorizacion/admin/pagos/{self.pago.id}/anular/'
+
+    def test_anular_sin_token_responde_401(self):
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, 401)
+
+    def test_anular_con_usuario_no_staff_responde_403(self):
+        self._auth(self.no_staff_token)
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, 403)
+
+    @patch('apps.autorizacion.api.admin_views.BDVPagoMovilC2PAdapter')
+    def test_anular_con_staff_exitoso_responde_200_y_transiciona_a_anulado(self, MockAdaptador):
+        MockAdaptador.return_value.anular.return_value = Mock(
+            codigo='1000', mensaje='Proceso finalizado', payload_crudo={'code': '1000'},
+        )
+        self._auth(self.staff_token)
+
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.pago.refresh_from_db()
+        self.assertEqual(self.pago.estado_actual, IntencionPago.EstadoPago.ANULADO)
+        self.assertEqual(Anulacion.objects.filter(pago=self.pago).count(), 1)
+        self.assertEqual(response.data['estado_pago'], IntencionPago.EstadoPago.ANULADO)
+
+    @patch('apps.autorizacion.api.admin_views.BDVPagoMovilC2PAdapter')
+    def test_anular_rechazado_por_proveedor_responde_409_y_no_transiciona(self, MockAdaptador):
+        MockAdaptador.return_value.anular.side_effect = ProveedorPagoError(
+            codigo='1050', mensaje='La solicitud superó el Timeout',
+        )
+        self._auth(self.staff_token)
+
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data['codigo_proveedor'], '1050')
+        self.pago.refresh_from_db()
+        self.assertEqual(self.pago.estado_actual, IntencionPago.EstadoPago.CAPTURADO)
+
+    @patch('apps.autorizacion.api.admin_views.BDVPagoMovilC2PAdapter')
+    def test_anular_proveedor_indisponible_responde_503(self, MockAdaptador):
+        MockAdaptador.return_value.anular.side_effect = ProveedorPagoIndisponibleError('timeout')
+        self._auth(self.staff_token)
+
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, 503)
+        self.pago.refresh_from_db()
+        self.assertEqual(self.pago.estado_actual, IntencionPago.EstadoPago.CAPTURADO)
+
+    @patch('apps.autorizacion.api.admin_views.BDVPagoMovilC2PAdapter')
+    def test_anular_pago_pendiente_responde_409_pago_no_anulable(self, MockAdaptador):
+        otro_pago = FlujoCobroC2PService.iniciar(
+            aplicacion=self.aplicacion, monto=Decimal('1000.60'), moneda_codigo='VES',
+        )
+        self._auth(self.staff_token)
+
+        response = self.client.post(f'/api/autorizacion/admin/pagos/{otro_pago.id}/anular/')
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data['error'], 'pago_no_anulable')
+        MockAdaptador.return_value.anular.assert_not_called()

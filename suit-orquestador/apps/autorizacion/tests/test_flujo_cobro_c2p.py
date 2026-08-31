@@ -2,9 +2,10 @@ import uuid
 from decimal import Decimal
 from unittest.mock import Mock
 
-from apps.autorizacion.application.services import FlujoCobroC2PService
+from apps.autorizacion.application.services import FlujoCobroC2PService, PagoNoAnulableError
 from apps.autorizacion.domain.errores_proveedor import ProveedorPagoError, ProveedorPagoIndisponibleError
 from apps.autorizacion.domain.models import (
+    Anulacion,
     AplicacionRegistrada,
     Autorizacion,
     Captura,
@@ -12,7 +13,12 @@ from apps.autorizacion.domain.models import (
     IntencionPago,
     WebhookEntrega,
 )
-from apps.autorizacion.domain.puertos_pago import PaymentProviderPort, ResultadoCobro, ResultadoOtp
+from apps.autorizacion.domain.puertos_pago import (
+    PaymentProviderPort,
+    ResultadoAnulacion,
+    ResultadoCobro,
+    ResultadoOtp,
+)
 from apps.autorizacion.tests.base import BaseAPITestCase
 
 
@@ -194,3 +200,91 @@ class FlujoCobroC2PServiceTests(BaseAPITestCase):
 
         self.assertEqual(resultado.codigo, '1000')
         adaptador.generar_otp.assert_called_once_with(cedula='V12345678')
+
+    def _pago_capturado(self):
+        pago = FlujoCobroC2PService.iniciar(aplicacion=self.aplicacion, monto=Decimal('1000.60'), moneda_codigo='VES')
+        adaptador = Mock(spec=PaymentProviderPort)
+        adaptador.procesar_cobro.return_value = ResultadoCobro(
+            codigo='1000', mensaje='Proceso finalizado',
+            referencia_corta='090037579602',
+            identificador_interbancario='0102010298400079090940416589264220251114162931090620472770',
+            payload_crudo={'code': '1000'},
+        )
+        FlujoCobroC2PService.ejecutar_cobro(
+            pago, adaptador=adaptador, cedula_pagador='V12345678', telefono_pagador='04125692243',
+            banco_codigo='0102', concepto='Pago', otp='5551111', telefono_comercio='04140282647',
+        )
+        pago.refresh_from_db()
+        return pago
+
+    def test_anular_cobro_exitoso_crea_anulacion_y_transiciona_a_anulado(self):
+        pago = self._pago_capturado()
+        adaptador = Mock(spec=PaymentProviderPort)
+        adaptador.anular.return_value = ResultadoAnulacion(
+            codigo='1000', mensaje='Proceso finalizado', payload_crudo={'code': '1000'},
+        )
+
+        anulacion = FlujoCobroC2PService.anular_cobro(pago, adaptador=adaptador)
+
+        pago.refresh_from_db()
+        self.assertEqual(pago.estado_actual, IntencionPago.EstadoPago.ANULADO)
+        self.assertEqual(Anulacion.objects.filter(pago=pago).count(), 1)
+        self.assertEqual(
+            anulacion.identificador_interbancario,
+            '0102010298400079090940416589264220251114162931090620472770',
+        )
+        adaptador.anular.assert_called_once_with(
+            identificador_interbancario='0102010298400079090940416589264220251114162931090620472770',
+            referencia_origen=None,
+        )
+
+    def test_anular_cobro_exitoso_publica_evento_outbox_pago_anulado(self):
+        pago = self._pago_capturado()
+        adaptador = Mock(spec=PaymentProviderPort)
+        adaptador.anular.return_value = ResultadoAnulacion(
+            codigo='1000', mensaje='Proceso finalizado', payload_crudo={'code': '1000'},
+        )
+
+        anulacion = FlujoCobroC2PService.anular_cobro(pago, adaptador=adaptador)
+
+        evento = EventoOutbox.objects.get(pago=pago, event_type='pago.anulado')
+        self.assertEqual(evento.schema_version, 1)
+        self.assertEqual(evento.estado, EventoOutbox.Estado.PENDIENTE)
+        self.assertEqual(evento.payload['pago_id'], str(pago.id))
+        self.assertEqual(evento.payload['identificador_interbancario'], anulacion.identificador_interbancario)
+        self.assertEqual(evento.payload['estado'], IntencionPago.EstadoPago.ANULADO)
+
+    def test_anular_cobro_rechazado_por_proveedor_no_persiste_nada_y_propaga_error(self):
+        pago = self._pago_capturado()
+        adaptador = Mock(spec=PaymentProviderPort)
+        adaptador.anular.side_effect = ProveedorPagoError(codigo='1050', mensaje='La solicitud superó el Timeout')
+
+        with self.assertRaises(ProveedorPagoError):
+            FlujoCobroC2PService.anular_cobro(pago, adaptador=adaptador)
+
+        pago.refresh_from_db()
+        self.assertEqual(pago.estado_actual, IntencionPago.EstadoPago.CAPTURADO)
+        self.assertEqual(Anulacion.objects.filter(pago=pago).count(), 0)
+        self.assertEqual(EventoOutbox.objects.filter(pago=pago, event_type='pago.anulado').count(), 0)
+
+    def test_anular_cobro_proveedor_indisponible_no_persiste_nada_y_propaga_error(self):
+        pago = self._pago_capturado()
+        adaptador = Mock(spec=PaymentProviderPort)
+        adaptador.anular.side_effect = ProveedorPagoIndisponibleError('timeout')
+
+        with self.assertRaises(ProveedorPagoIndisponibleError):
+            FlujoCobroC2PService.anular_cobro(pago, adaptador=adaptador)
+
+        pago.refresh_from_db()
+        self.assertEqual(pago.estado_actual, IntencionPago.EstadoPago.CAPTURADO)
+        self.assertEqual(Anulacion.objects.filter(pago=pago).count(), 0)
+
+    def test_anular_cobro_pago_no_capturado_lanza_pago_no_anulable_sin_llamar_al_adaptador(self):
+        pago = FlujoCobroC2PService.iniciar(aplicacion=self.aplicacion, monto=Decimal('1000.60'), moneda_codigo='VES')
+        adaptador = Mock(spec=PaymentProviderPort)
+
+        with self.assertRaises(PagoNoAnulableError) as ctx:
+            FlujoCobroC2PService.anular_cobro(pago, adaptador=adaptador)
+
+        self.assertEqual(ctx.exception.estado_actual, IntencionPago.EstadoPago.PENDIENTE)
+        adaptador.anular.assert_not_called()

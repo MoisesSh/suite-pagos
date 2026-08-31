@@ -3,6 +3,7 @@ from django.utils import timezone
 
 from apps.autorizacion.domain.errores_proveedor import ProveedorPagoError, ProveedorPagoIndisponibleError
 from apps.autorizacion.domain.models import (
+    Anulacion,
     Autorizacion,
     Captura,
     CodigoRespuestaProveedor,
@@ -26,6 +27,20 @@ TIPO_OPERACION_CODIGO = 'CELE'
 EVENT_TYPE_PAGO_CONFIRMADO = 'pago.confirmado'
 SCHEMA_VERSION_PAGO_CONFIRMADO = 1
 
+# Mismo criterio que pago.confirmado (Bloque #22): forma cerrada desde su primera
+# versión, un cambio de campos exige subir schema_version, nunca editar la v1.
+EVENT_TYPE_PAGO_ANULADO = 'pago.anulado'
+SCHEMA_VERSION_PAGO_ANULADO = 1
+
+
+class PagoNoAnulableError(Exception):
+    """Solo un IntencionPago en estado CAPTURADO tiene un identificador_interbancario
+    real que BDV pueda anular — no hay nada que revertir en otro estado."""
+
+    def __init__(self, estado_actual):
+        self.estado_actual = estado_actual
+        super().__init__(f'IntencionPago en estado {estado_actual!r} no es anulable')
+
 
 class FlujoCobroC2PService:
     """Orquesta IntencionPago -> Autorizacion -> Captura para el medio Pago Móvil C2P,
@@ -34,8 +49,10 @@ class FlujoCobroC2PService:
     C2P es cargo instantáneo: process/v2 hace la reserva y el cobro real en una sola
     llamada al banco, por lo que Autorizacion y Captura se crean juntas a partir de la
     misma respuesta exitosa (db-plan-pagos.md 2.5) — no hay una captura separada que
-    disparar después. La anulación no se orquesta aquí todavía: queda para el bloque
-    que exponga el endpoint público de reversión."""
+    disparar después. La anulación (Bloque #22) solo la dispara staff de Conatel desde
+    suit-panel, sin endpoint público equivalente ni ventana de tiempo propia: se
+    intenta siempre contra BDV y, si el banco la rechaza por su propia ventana, ese
+    rechazo se propaga tal cual."""
 
     @staticmethod
     @transaction.atomic
@@ -167,3 +184,69 @@ class FlujoCobroC2PService:
                 WebhookEntrega.objects.create(evento=evento_outbox)
 
         return autorizacion, captura
+
+    @staticmethod
+    def _construir_payload_pago_anulado(pago, proveedor, anulacion):
+        return {
+            'pago_id': str(pago.id),
+            'aplicacion_id': str(pago.aplicacion_id),
+            'proveedor_codigo': proveedor.codigo,
+            'medio_pago_codigo': pago.medio_pago.codigo,
+            'monto': str(pago.monto),
+            'moneda_codigo': pago.moneda.codigo,
+            'referencia_corta': anulacion.referencia_corta,
+            'identificador_interbancario': anulacion.identificador_interbancario,
+            'codigo_respuesta_proveedor': anulacion.codigo_respuesta.codigo,
+            'anulado_at': anulacion.created_at.isoformat(),
+            'estado': pago.estado_actual,
+            'payload_crudo_anulacion': anulacion.payload_crudo,
+        }
+
+    @staticmethod
+    def anular_cobro(pago, *, adaptador, referencia_origen=None):
+        """Revierte un cobro ya capturado. Sin ventana de tiempo propia (decisión de
+        negocio, Bloque #22): siempre se intenta contra BDV, y si el banco rechaza por
+        su propia ventana de anulación (u otro motivo de negocio), ese ProveedorPagoError
+        se propaga tal cual — no se atrapa ni se traduce acá."""
+        if pago.estado_actual != IntencionPago.EstadoPago.CAPTURADO:
+            raise PagoNoAnulableError(pago.estado_actual)
+
+        captura = pago.capturas.latest('created_at')
+        proveedor = ProveedorPago.objects.get(codigo=PROVEEDOR_CODIGO)
+        tipo_operacion = TipoOperacionProveedor.objects.get(proveedor=proveedor, codigo=TIPO_OPERACION_CODIGO)
+
+        # I/O externo fuera de atomic(), mismo criterio que ejecutar_cobro. Ni
+        # ProveedorPagoError ni ProveedorPagoIndisponibleError se atrapan acá: en
+        # ambos casos el pago se queda en CAPTURADO tal cual estaba, sin persistir
+        # ninguna Anulacion — no hubo reversión real que registrar.
+        resultado = adaptador.anular(
+            identificador_interbancario=captura.identificador_interbancario,
+            referencia_origen=referencia_origen,
+        )
+
+        with transaction.atomic():
+            codigo_respuesta = CodigoRespuestaProveedor.objects.get(proveedor=proveedor, codigo=resultado.codigo)
+            anulacion = Anulacion.objects.create(
+                pago=pago,
+                proveedor=proveedor,
+                tipo_operacion=tipo_operacion,
+                codigo_respuesta=codigo_respuesta,
+                referencia_proveedor=captura.identificador_interbancario,
+                referencia_corta=captura.referencia_corta,
+                identificador_interbancario=captura.identificador_interbancario,
+                payload_crudo=resultado.payload_crudo,
+                monto=pago.monto,
+            )
+            FlujoCobroC2PService._transicionar(pago, IntencionPago.EstadoPago.ANULADO)
+
+            # Mismo outbox pattern que pago.confirmado: sin este evento, Conciliación
+            # nunca se entera de la reversión y el ledger queda con un cobro fantasma
+            # que ya nadie va a conciliar.
+            EventoOutbox.objects.create(
+                pago=pago,
+                event_type=EVENT_TYPE_PAGO_ANULADO,
+                payload=FlujoCobroC2PService._construir_payload_pago_anulado(pago, proveedor, anulacion),
+                schema_version=SCHEMA_VERSION_PAGO_ANULADO,
+            )
+
+        return anulacion

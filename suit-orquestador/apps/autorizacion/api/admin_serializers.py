@@ -64,3 +64,7 @@ class AdminAplicacionActivarSerializer(serializers.ModelSerializer):
         model = AplicacionRegistrada
         fields = ['activa', 'webhook_url']
         extra_kwargs = {'activa': {'required': False}, 'webhook_url': {'required': False}}
+
+
+class AdminAnularPagoRequestSerializer(serializers.Serializer):
+    referencia_origen = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)

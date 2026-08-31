@@ -4,17 +4,21 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
 from apps.autorizacion.api.admin_serializers import (
+    AdminAnularPagoRequestSerializer,
     AdminAplicacionActivarSerializer,
     AdminAplicacionCrearSerializer,
     AdminAplicacionListItemSerializer,
     AdminAplicacionSerializer,
 )
+from apps.autorizacion.application.services.flujo_cobro_c2p import FlujoCobroC2PService, PagoNoAnulableError
 from apps.autorizacion.application.services.registro_aplicacion import (
     DominioYaRegistradoError,
     ProveedorNoEncontradoError,
     RegistroAplicacionService,
 )
-from apps.autorizacion.domain.models import AplicacionRegistrada
+from apps.autorizacion.domain.errores_proveedor import ProveedorPagoError, ProveedorPagoIndisponibleError
+from apps.autorizacion.domain.models import AplicacionRegistrada, IntencionPago
+from apps.autorizacion.infrastructure.adapters.bdv_c2p import BDVPagoMovilC2PAdapter
 
 
 class AdminAplicacionListCreateView(generics.ListCreateAPIView):
@@ -75,3 +79,45 @@ class AdminAplicacionActivarView(generics.UpdateAPIView):
             RegistroAplicacionService.activar_desactivar(serializer.instance, datos['activa'])
         if 'webhook_url' in datos:
             RegistroAplicacionService.configurar_webhook(serializer.instance, datos['webhook_url'])
+
+
+class AdminAnularPagoView(generics.GenericAPIView):
+    """POST admin para forzar la anulación de un cobro C2P ya capturado (Bloque #22).
+    Solo staff de Conatel puede pedirla — se dispara desde suit-panel, sin endpoint
+    público equivalente para apps consumidoras. Sin ventana de tiempo propia: siempre
+    se intenta contra BDV; si el banco la rechaza (por su propia ventana u otro motivo
+    de negocio), ese rechazo se propaga tal cual, sin traducir a un mensaje propio."""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAdminUser]
+    queryset = IntencionPago.objects.all()
+    lookup_url_kwarg = 'id'
+
+    def post(self, request, *args, **kwargs):
+        pago = self.get_object()
+        entrada = AdminAnularPagoRequestSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+
+        adaptador = BDVPagoMovilC2PAdapter()
+        try:
+            anulacion = FlujoCobroC2PService.anular_cobro(
+                pago, adaptador=adaptador,
+                referencia_origen=entrada.validated_data.get('referencia_origen'),
+            )
+        except PagoNoAnulableError as exc:
+            return Response(
+                {'error': 'pago_no_anulable', 'estado_actual': exc.estado_actual}, status=status.HTTP_409_CONFLICT,
+            )
+        except ProveedorPagoError as exc:
+            return Response(
+                {'error': 'proveedor_rechazo_anulacion', 'codigo_proveedor': exc.codigo, 'mensaje': exc.mensaje},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except ProveedorPagoIndisponibleError:
+            return Response({'error': 'proveedor_no_disponible'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        return Response({
+            'id': str(anulacion.id),
+            'pago_id': str(pago.id),
+            'estado_pago': pago.estado_actual,
+            'codigo_respuesta': anulacion.codigo_respuesta.codigo,
+        }, status=status.HTTP_200_OK)

@@ -3,7 +3,7 @@ from apps.autorizacion.application.services.checkout_token import (
     CheckoutTokenService,
     CheckoutTokenYaUtilizadoError,
 )
-from apps.autorizacion.application.services.flujo_cobro_c2p import FlujoCobroC2PService
+from apps.autorizacion.application.services.flujo_cobro_c2p import FlujoCobroC2PService, PagoNoAnulableError
 from apps.autorizacion.application.services.idempotencia import IdempotencyConflictError, IdempotencyService
 from apps.autorizacion.application.services.registro_aplicacion import (
     DominioYaRegistradoError,
@@ -24,6 +24,7 @@ __all__ = [
     'FlujoCobroC2PService',
     'IdempotencyConflictError',
     'IdempotencyService',
+    'PagoNoAnulableError',
     'ProveedorNoEncontradoError',
     'RegistroAplicacionService',
     'ValidacionAccesoService',

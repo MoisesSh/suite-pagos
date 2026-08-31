@@ -10,6 +10,13 @@ export class DiscrepanciasPage {
   async goto() {
     await this.page.goto("/discrepancias");
     await expect(this.page.locator("h1")).toHaveText("Discrepancias");
+    // La lista se carga client-side via SWR (skeleton -> contenido); esperar
+    // a que desaparezca antes de contar links, si no la carrera da 0 falsos.
+    await this.page
+      .locator('[data-slot="skeleton"]')
+      .first()
+      .waitFor({ state: "detached", timeout: 10_000 })
+      .catch(() => {});
   }
 
   async clickPrimerLinkLedger() {

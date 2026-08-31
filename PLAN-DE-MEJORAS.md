@@ -5,7 +5,19 @@
 > antes de recibir la orden de ejecución del coordinador. Se agrega un bloque nuevo
 > cada vez que un agente propone el siguiente incremento de trabajo.
 
-Última actualización: 2026-08-29
+Última actualización: 2026-08-30
+
+---
+
+## Bloque #19 — Fix: registro/listado de aplicaciones no funcionaba en Docker (ECONNREFUSED) ✅ COMPLETADO (coordinador)
+
+**Reportado por:** usuario (probando el panel real, "no registra las apps autorizadas").
+
+**Bug:** `deploy/docker-compose.yml`, servicio `suit-panel` — el bloque `environment:` sobreescribía `CONCILIACION_API_URL` con el hostname interno de Docker (`http://suit-conciliacion:8000`) pero **no hacía lo mismo con `ORQUESTADOR_API_URL`**, así que ese valor se colaba desde `suit-panel/.env` (`http://localhost:8001`, correcto para desarrollo local fuera de Docker). Dentro de la red de compose, `localhost` es el propio contenedor de `suit-panel`, no el Orquestador — cualquier fetch server-side a `ORQUESTADOR_API_URL` fallaba con `ECONNREFUSED` (confirmado en `docker logs suit-pagos-suit-panel-1`). Afectaba tanto el listado como el alta/edición de `AplicacionRegistrada` (todo el módulo `aplicaciones/` de `suit-panel` depende de esta URL).
+
+**Fix:** agregado `ORQUESTADOR_API_URL: http://suit-orquestador:8000` al `environment:` del servicio `suit-panel`, mismo patrón ya usado para `CONCILIACION_API_URL`. Recreado el contenedor (sin rebuild, solo variable de entorno) y verificado en vivo: `GET /api/autorizacion/admin/aplicaciones/` desde dentro del contenedor de `suit-panel` devuelve las 3 aplicaciones reales ya registradas.
+
+**Lección:** cuando un servicio del compose necesita hablar con más de un backend interno, cada URL debe overridearse explícitamente — el `env_file` de desarrollo local nunca debe asumirse válido dentro de la red de Docker.
 
 ---
 

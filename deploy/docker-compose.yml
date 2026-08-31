@@ -159,6 +159,12 @@ services:
     env_file: ../suit-panel/.env
     environment:
       CONCILIACION_API_URL: http://suit-conciliacion:8000
+      # Hostname interno de Docker, no localhost — el .env de desarrollo local
+      # trae localhost:8001 (correcto fuera de Docker), pero dentro de la red
+      # de compose "localhost" es el propio contenedor de suit-panel, no el
+      # Orquestador. Sin este override, el registro/listado de aplicaciones
+      # falla con ECONNREFUSED (bug real encontrado en producción).
+      ORQUESTADOR_API_URL: http://suit-orquestador:8000
       NEXTAUTH_URL: http://localhost:3000
       AUTH_TRUST_HOST: "true" # Auth.js/NextAuth v5 detras de Docker/proxy: sin esto rechaza el host con UntrustedHost
     ports:
